@@ -6,7 +6,7 @@ import { errorText, hasFeature, hasView, viewActions } from '../core/api';
 import { clock, dollars, duration, relative, shiftMonth, upcoming, won, ymd } from '../core/format';
 import { connectionLabel } from '../core/session';
 import {
-  canToggle, type AutonomyView, type BlocksView, type HardwareView, type Job, type JobsView, type ModelTiersView,
+  canToggle, type AutonomyView, type BlocksView, rowMessage, type HardwareView, type Job, type JobsView, type ModelTiersView,
   type Provider, type ProvidersView, type Routine, type RoutinesView, type Recording, type RecordingsView, type SpendEntry, type SpendingView, type UsageView,
 } from '../core/views';
 import { Button, CardHeader, Check, Icon, KV, List, Loaded, Markdown, MenuRow, Meter, Panel, Row, Segmented, Sheet, Spinner, Switch, useLoad } from '../ui/kit';
@@ -826,8 +826,12 @@ export function Blocks({ name }: { name: string }) {
               case 'list': return (
                 <Panel key={i}>
                   {b.title && <CardHeader title={b.title} />}
-                  <List>{(b.rows ?? []).map((r, j) => <Row key={j} title={r.title} detail={r.detail}
-                    trailing={isSites(b.title) ? <Button kind="danger" small onClick={() => setForgetting(r)}>잊기</Button> : r.trailing ? <span className="footnote">{r.trailing}</span> : undefined} />)}</List>
+                  <List>{(b.rows ?? []).map((r, j) => {
+                    const message = rowMessage(r);
+                    return <Row key={j} title={r.title} detail={r.detail} chevron={!!message}
+                      onClick={message ? () => { session.send(message, ''); session.say('비서에게 부탁했어요'); } : undefined}
+                      trailing={isSites(b.title) ? <span onClick={(e) => e.stopPropagation()}><Button kind="danger" small onClick={() => setForgetting(r)}>잊기</Button></span> : r.trailing ? <span className="footnote">{r.trailing}</span> : undefined} />;
+                  })}</List>
                 </Panel>
               );
               case 'note': return <div key={i} className="footnote" style={{ padding: '0 4px' }}>{b.text}</div>;

@@ -16,6 +16,7 @@ import * as teamPlan from './mock/teamplan.mjs';
 import * as work from './mock/work.mjs';
 import * as firstLook from './mock/firstlook.mjs';
 import * as people from './mock/people.mjs';
+import * as drive from './mock/drive.mjs';
 import * as dictation from './mock/dictation.mjs';
 import * as appUpdates from './mock/appupdates.mjs';
 
@@ -31,7 +32,7 @@ process.on('exit', () => child.kill());
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { child.kill(); process.exit(0); });
 
 /** Extensions, in order. Each may `handle` a request (return true when it answered) or `augment` a JSON reply. */
-const extensions = [routes, stats, instructions, browserLive, projects, teamPlan, work, firstLook, people, dictation, appUpdates];
+const extensions = [routes, stats, instructions, browserLive, projects, teamPlan, work, firstLook, people, dictation, appUpdates, drive];
 
 const send = (res, status, body) => {
   const data = JSON.stringify(body);

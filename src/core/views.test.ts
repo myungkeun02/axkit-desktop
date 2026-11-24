@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allTeams, botFor, groupForMeeting, showsMeeting, teamFor, teamMembers, type BotsView } from './views';
+import { allTeams, botFor, rowMessage, groupForMeeting, showsMeeting, teamFor, teamMembers, type BotsView } from './views';
 
 const bots: BotsView = {
   groups: [
@@ -29,5 +29,16 @@ describe('bots view helpers (R16, R17)', () => {
     expect(showsMeeting(bots.groups[1])).toBe(false);
     expect(groupForMeeting(bots, 'meeting:hanbit')?.label).toBe('한빛랩');
     expect(allTeams(bots).map((t) => t.group.id)).toEqual(['hanbit', 'hanbit', 'me']);
+  });
+});
+
+describe('rowMessage (§34)', () => {
+  it('gives the sentence when a row has one', () => {
+    expect(rowMessage({ title: '분기 보고서.pdf', message: '드라이브의 "분기 보고서.pdf" 내용을 요약해 줘' })).toBe('드라이브의 "분기 보고서.pdf" 내용을 요약해 줘');
+  });
+  it('leaves rows without a usable message unpressable', () => {
+    expect(rowMessage({ title: 'a' })).toBeUndefined();
+    expect(rowMessage({ title: 'a', message: '   ' })).toBeUndefined();
+    expect(rowMessage({ title: 'a', message: 3 as unknown as string })).toBeUndefined();
   });
 });

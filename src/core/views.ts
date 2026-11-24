@@ -98,7 +98,14 @@ export interface HardwareView {
   network?: Record<string, string>; server?: Record<string, string>; summary?: string;
 }
 
-export interface Block { kind: string; title?: string; text?: string; value?: string; rows?: { title: string; detail?: string; trailing?: string }[]; message?: string }
+export interface BlockRow { title: string; detail?: string; trailing?: string; message?: string }
+export interface Block { kind: string; title?: string; text?: string; value?: string; rows?: BlockRow[]; message?: string }
+
+/** §34: a blocks row with a `message` can be pressed; it says that sentence in chat (like an `ask` block). */
+export function rowMessage(row: BlockRow): string | undefined {
+  const m = typeof row.message === 'string' ? row.message.trim() : '';
+  return m ? m : undefined;
+}
 export interface BlocksView { title: string; blocks: Block[] }
 
 export interface AutonomyView { rules: { id: string; label: string; detail?: string; since?: string; uses?: number }[]; alwaysAsk?: string[] }
