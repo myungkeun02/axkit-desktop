@@ -1,0 +1,55 @@
+/* 대시보드. Chart colors are the dataviz reference palette, validated against this app's card surfaces
+   (light #ffffff, dark #1c1c1e): categorical slots in fixed order, dark mode stepped for the dark surface.
+   Light slots 3–5 sit under 3:1 on white, so every chart has a legend, a tooltip and a table view. */
+.dash {
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; --series-6: #6250d6;
+  --chart-surface: #ffffff;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-muted: #898781;
+}
+@media (prefers-color-scheme: dark) {
+  .dash {
+    --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #9085e9;
+    --chart-surface: #1c1c1e;
+    --chart-grid: #2c2c2a;
+    --chart-axis: #383835;
+    --chart-muted: #898781;
+  }
+}
+
+.dash .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.dash .tile { background: var(--card); border-radius: var(--corner); padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dash .tile .k { font-size: 12.5px; color: var(--text2); }
+.dash .tile .v { font-size: 26px; font-weight: 700; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash .tile .s { font-size: 12.5px; color: var(--text2); }
+.dash .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .dash .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dash .grid { grid-template-columns: 1fr; } }
+
+.dash .chart-card { background: var(--card); border-radius: var(--corner); padding: 16px 18px 12px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.dash .chart-head { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.dash .chart-head .titles { flex: 1; min-width: 160px; }
+.dash .chart-head .title { font-size: 15px; font-weight: 600; }
+.dash .chart-head .sub { font-size: 12.5px; color: var(--text2); margin-top: 2px; }
+.dash .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dash .chart { height: 240px; }
+.dash .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text2); }
+.dash .legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dash .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.dash .foot { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text2); }
+.dash .foot .btn { margin-left: auto; }
+
+.dash .tip { background: var(--card); color: var(--text); border-radius: 10px; box-shadow: var(--shadow); padding: 8px 12px; font-size: 12.5px; min-width: 150px; border: 0.5px solid var(--sep); }
+.dash .tip .h { font-weight: 600; margin-bottom: 4px; }
+.dash .tip .r { display: flex; align-items: center; gap: 8px; }
+.dash .tip .r .n { flex: 1; color: var(--text2); }
+.dash .tip .r .x { font-variant-numeric: tabular-nums; }
+.dash .tip .t { border-top: 0.5px solid var(--sep); margin-top: 4px; padding-top: 4px; display: flex; }
+.dash .tip .t .x { margin-left: auto; font-weight: 600; }
+
+.dash table.data { width: 100%; border-collapse: collapse; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.dash table.data th, .dash table.data td { padding: 5px 8px; text-align: right; border-bottom: 0.5px solid var(--sep); white-space: nowrap; }
+.dash table.data th:first-child, .dash table.data td:first-child { text-align: left; }
+.dash table.data th { color: var(--text2); font-weight: 600; }
+.dash .table-wrap { max-height: 240px; overflow: auto; }
+.dash .recharts-wrapper, .dash .recharts-surface { outline: none; }

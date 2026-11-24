@@ -1,0 +1,33 @@
+[package]
+name = "ax-kit-desktop"
+version = "0.1.0"
+description = "ax-kit 맥 데스크톱 앱"
+edition = "2021"
+publish = false
+
+[lib]
+name = "axkit_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "native-tls"] }
+keyring = { version = "3", features = ["apple-native"] }
+tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
+futures-util = "0.3"
+url = "2"
+dirs = "6"
+tauri-plugin-notification = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+
+[profile.release]
+strip = true
+lto = true

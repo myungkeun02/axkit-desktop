@@ -1,0 +1,52 @@
+/* Maps and routes (MapView, DayRoutes). Same tokens as styles.css. */
+.ax-map { width: 100%; border-radius: 14px; overflow: hidden; background: var(--page); position: relative; }
+.ax-map .maplibregl-ctrl-attrib { font-size: 10px; }
+.ax-map .maplibregl-ctrl-group { border-radius: 10px; box-shadow: var(--shadow); }
+
+.ax-pin {
+  min-width: 26px; height: 26px; padding: 0 7px; border-radius: 13px; background: var(--accent); color: #fff;
+  font: 700 12.5px -apple-system, BlinkMacSystemFont, sans-serif; display: flex; align-items: center; justify-content: center;
+  border: 2.5px solid var(--card); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); cursor: default;
+}
+.ax-pin:empty { min-width: 18px; height: 18px; padding: 0; }
+.ax-pin.home { background: var(--text); color: var(--card); }
+
+.legs { display: flex; flex-direction: column; gap: 10px; }
+.leg {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 14px; border: 1px solid var(--sep);
+  background: var(--card); cursor: pointer; text-align: left; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.leg:hover { border-color: var(--accent); }
+.leg.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.leg .where { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.leg .where .arrow { color: var(--text3); }
+.leg .leave { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.leg .leave .big { font-size: 17px; font-weight: 700; }
+.leg .leave .when { font-size: 13px; font-weight: 600; color: var(--accent); }
+.leg .leave .when.late { color: var(--red); }
+
+.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.mode {
+  border: 1px solid var(--sep); border-radius: 12px; padding: 9px 11px; background: transparent; text-align: left;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.mode:hover { background: var(--accent-soft); }
+.mode.on { border-color: var(--accent); background: var(--accent-soft); }
+.mode .name { font-size: 12px; font-weight: 600; color: var(--text2); display: flex; gap: 6px; align-items: center; }
+.mode .dur { font-size: 16px; font-weight: 700; }
+.mode .meta { font-size: 12px; color: var(--text2); }
+.mode .pick { font-size: 11px; font-weight: 700; color: var(--accent); }
+
+.steps-bar { display: flex; gap: 3px; height: 8px; border-radius: 4px; overflow: hidden; }
+.steps-bar > span { display: block; height: 100%; border-radius: 4px; min-width: 6px; }
+.steps-bar > span.walk { background: repeating-linear-gradient(90deg, var(--text3) 0 4px, transparent 4px 7px); }
+.steps-labels { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text2); }
+.steps-labels .line { display: inline-flex; align-items: center; gap: 5px; color: var(--text); font-weight: 600; }
+.steps-labels .chip { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+@media (prefers-color-scheme: dark) {
+  .ax-map .maplibregl-ctrl-attrib, .ax-map .maplibregl-ctrl-group { background: var(--card); color: var(--text2); }
+  .ax-map .maplibregl-ctrl-attrib a { color: var(--text2); }
+  .ax-map .maplibregl-ctrl-group button + button { border-top-color: var(--sep); }
+  .ax-map .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1); }
+  .ax-map .maplibregl-ctrl-attrib-button { filter: invert(1); }
+}

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>회의를 녹음해서 맥의 비서가 회의록으로 정리해요.</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>dev.axkit.desktop.pair</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>axkit</string>
+      </array>
+    </dict>
+  </array>
+</dict>
+</plist>
