@@ -7,12 +7,13 @@
 //   names the members after jobs it finds in the text, or generic ones.)
 // The changes are kept here and laid over the upstream views/bots. /dev/botedit clears them.
 
-const ACTIONS = ['renameTeam', 'editBot', 'moveBot', 'createTeamFromText'];
+const ACTIONS = ['renameTeam', 'editBot', 'moveBot', 'createTeamFromText', 'deleteTeam'];
 let teams = new Map(); // teamId → {name, purpose?}
 let bots = new Map(); // botId → {name?, role?}
 let moves = new Map(); // botId → teamId
+let deleted = new Set(); // team ids (5e70340 deleteTeam {teamId, confirm: true}: the team and its members go)
 
-export function devReset() { teams = new Map(); bots = new Map(); moves = new Map(); }
+export function devReset() { teams = new Map(); bots = new Map(); moves = new Map(); deleted = new Set(); }
 
 /** The upstream view with this mock's edits applied. */
 function apply(data) {
@@ -34,6 +35,11 @@ function apply(data) {
       bot.team = teamId; bot.channel = hit.t.channel;
       if (from !== hit.g) { from.bots = from.bots.filter((b) => b.id !== botId); hit.g.bots = [...hit.g.bots, bot]; }
     }
+  }
+  for (const g of groups) {
+    const gone = new Set((g.teams ?? []).filter((t) => deleted.has(t.id)).flatMap((t) => t.members));
+    g.teams = (g.teams ?? []).filter((t) => !deleted.has(t.id));
+    g.bots = g.bots.filter((b) => !gone.has(b.id));
   }
   return { ...data, groups };
 }
@@ -93,7 +99,7 @@ async function createFromText(body, token, upstream, send, res) {
 }
 
 export async function handle({ req, res, path, send, token, upstream }) {
-  const m = /^views\/bots\/(renameTeam|editBot|moveBot|createTeamFromText)$/.exec(path ?? '');
+  const m = /^views\/bots\/(renameTeam|editBot|moveBot|createTeamFromText|deleteTeam)$/.exec(path ?? '');
   if (req.method !== 'POST' || !m) return false;
   const body = await readJson(req);
   if (m[1] === 'createTeamFromText') return await createFromText(body, token, upstream, send, res), true;
@@ -102,6 +108,13 @@ export async function handle({ req, res, path, send, token, upstream }) {
   const allBots = view.groups.flatMap((g) => g.bots ?? []);
   const reply = (data) => send(res, 200, { ok: true, view: 'bots', action: m[1], data });
   const owner = (message) => send(res, 400, { ok: false, error: 'invalid_input', message });
+  if (m[1] === 'deleteTeam') {
+    if (body.confirm !== true) return send(res, 400, { ok: false, error: 'invalid_input' }), true;
+    const t = allTeams.find((x) => x.id === body.teamId);
+    if (!t) return owner('그런 팀이 없어요'), true;
+    deleted.add(t.id);
+    return reply({ teamId: t.id, name: t.name, removedBots: t.members.length }), true;
+  }
   if (m[1] === 'renameTeam') {
     if (!str(body.name, 1, 40) || (body.purpose !== undefined && !str(body.purpose, 0, 200))) return send(res, 400, { ok: false, error: 'invalid_input' }), true;
     const t = allTeams.find((x) => x.id === body.teamId);

@@ -22,6 +22,7 @@ export const Icon = {
   search: () => <svg viewBox="0 0 24 24" {...P} strokeWidth={2}><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>,
   scope: () => <svg viewBox="0 0 24 24" {...P}><circle cx="12" cy="12" r="6.5" /><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4" /></svg>,
   phone: () => <svg viewBox="0 0 24 24" {...P}><rect x="7" y="3" width="10" height="18" rx="2.5" /><path d="M11 18h2" /></svg>,
+  envelope: () => <svg viewBox="0 0 24 24" {...P}><rect x="3.5" y="6" width="17" height="12" rx="2" /><path d="M4 7.5l8 6 8-6" /></svg>,
   mac: () => <svg viewBox="0 0 24 24" {...P}><rect x="4" y="9" width="16" height="7" rx="2" /><path d="M7 19h10" /></svg>,
   wave: () => <svg viewBox="0 0 24 24" {...P}><path d="M4 12h1M7.5 8v8M11 5v14M14.5 8v8M18 10.5v3M20.5 12h-.5" /></svg>,
   wand: () => <svg viewBox="0 0 24 24" {...P}><path d="M5 19L15 9M14 5l1-2 1 2 2 1-2 1-1 2-1-2-2-1zM19 12l.6-1.2L21 10l-1.4-.8L19 8l-.6 1.2L17 10l1.4.8z" /></svg>,
@@ -59,6 +60,7 @@ export function iconFor(name?: string): () => ReactNode {
   if (name.includes('doc')) return Icon.doc;
   if (name.includes('globe')) return Icon.globe;
   if (name.includes('checklist')) return Icon.checklist;
+  if (name.includes('envelope') || name.includes('mail')) return Icon.envelope;
   return Icon.sparkle;
 }
 

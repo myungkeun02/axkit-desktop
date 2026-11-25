@@ -125,7 +125,10 @@ function useDestinations(): Dest[] {
     ...sec('projects', '프로젝트 가져오기', '맥', Icon.box, hasFeature(caps, 'projects') && has('projects'), { rare: true }),
     ...sec('phone-apps', '휴대폰 앱 설치', '맥', Icon.phone, true, { rare: true }),
     ...sec('help', '도움말', '맥', Icon.info, true, { rare: true }),
-    ...caps.views.filter((v) => v.ui === 'blocks').flatMap((v) => sec(`blocks:${v.name}`, v.title ?? v.name, '새 기능', iconFor(v.icon))),
+    // §38: the mail screen is a blocks view, but one the owner opens every day: under 정리 with 문서·캘린더, not 새 기능.
+    ...caps.views.filter((v) => v.ui === 'blocks').flatMap((v) => (v.name === 'mail' && hasFeature(caps, 'mail-screen')
+      ? sec(`blocks:${v.name}`, '메일', '정리', Icon.envelope)
+      : sec(`blocks:${v.name}`, v.title ?? v.name, '새 기능', iconFor(v.icon)))),
   );
   return out;
 }

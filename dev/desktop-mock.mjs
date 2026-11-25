@@ -21,6 +21,7 @@ import * as calendars from './mock/calendars.mjs';
 import * as botEdit from './mock/botedit.mjs';
 import * as digest from './mock/digest.mjs';
 import * as shareRooms from './mock/sharerooms.mjs';
+import * as mail from './mock/mail.mjs';
 import * as dictation from './mock/dictation.mjs';
 import * as appUpdates from './mock/appupdates.mjs';
 
@@ -36,7 +37,7 @@ process.on('exit', () => child.kill());
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { child.kill(); process.exit(0); });
 
 /** Extensions, in order. Each may `handle` a request (return true when it answered) or `augment` a JSON reply. */
-const extensions = [routes, stats, instructions, browserLive, projects, teamPlan, work, firstLook, people, dictation, appUpdates, drive, calendars, botEdit, digest, shareRooms];
+const extensions = [routes, stats, instructions, browserLive, projects, teamPlan, work, firstLook, people, dictation, appUpdates, drive, calendars, botEdit, digest, shareRooms, mail];
 
 const send = (res, status, body) => {
   const data = JSON.stringify(body);

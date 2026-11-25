@@ -101,13 +101,26 @@ export interface HardwareView {
   network?: Record<string, string>; server?: Record<string, string>; summary?: string;
 }
 
-export interface BlockRow { title: string; detail?: string; trailing?: string; message?: string }
+export interface BlockRow { title: string; detail?: string; trailing?: string; message?: string; /** §38: opens the same screen with this query (like a folder) */ query?: unknown }
 export interface Block { kind: string; title?: string; text?: string; value?: string; rows?: BlockRow[]; message?: string }
 
 /** §34: a blocks row with a `message` can be pressed; it says that sentence in chat (like an `ask` block). */
 export function rowMessage(row: BlockRow): string | undefined {
   const m = typeof row.message === 'string' ? row.message.trim() : '';
   return m ? m : undefined;
+}
+/**
+ * §38: a row's `query` as the view's query string values (strings, numbers and booleans; anything else dropped),
+ * or undefined when the row has none. `{}` is the first screen.
+ */
+export function rowQuery(row: BlockRow): Record<string, string> | undefined {
+  const q = row.query;
+  if (!q || typeof q !== 'object' || Array.isArray(q)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(q as Record<string, unknown>)) {
+    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = String(v);
+  }
+  return out;
 }
 export interface BlocksView { title: string; blocks: Block[] }
 

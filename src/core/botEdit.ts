@@ -9,6 +9,7 @@ export const canEdit = (actions: string[]) => ({
   renameTeam: actions.includes('renameTeam'),
   editBot: actions.includes('editBot'),
   moveBot: actions.includes('moveBot'),
+  deleteTeam: actions.includes('deleteTeam'),
 });
 
 /** The body for renameTeam, or the reason it can't be sent. Purpose is sent only when it changed. */

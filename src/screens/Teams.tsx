@@ -131,7 +131,40 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
           </List>
         </Panel>
       )}
+      {edits.deleteTeam && <DeleteTeam team={team} members={members.length} />}
     </div>
+  );
+}
+
+/** §37 팀 지우기: asked once ("정말 지울까요?"), then `confirm: true`; the room's past conversation stays on the Mac. */
+function DeleteTeam({ team, members }: { team: Team; members: number }) {
+  const { session, go } = useApp();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const remove = async () => {
+    setBusy(true); setProblem(null);
+    try {
+      const r = await session.api.viewAction<{ name?: string }>('bots', 'deleteTeam', { teamId: team.id, confirm: true });
+      if (session.justBuilt?.teamId === team.id) session.justBuilt = null;
+      setAsking(false);
+      go({ section: 'home' });
+      await session.refreshBasics();
+      session.say(`${r?.name ?? team.name}을(를) 지웠어요`);
+    } catch (e) { setProblem(errorText(e)); setBusy(false); }
+  };
+  return (
+    <>
+      <div style={{ paddingTop: 8 }}><Button kind="danger" full onClick={() => setAsking(true)}>팀 지우기</Button></div>
+      {asking && (
+        <Sheet title="팀 지우기" onClose={() => { if (!busy) setAsking(false); }}>
+          <div>정말 {team.name}을(를) 지울까요? 팀원 {members}명도 같이 지워져요. 지난 대화는 남아요.</div>
+          {problem && <div className="footnote red" role="alert">{problem}</div>}
+          <Button kind="danger" full busy={busy} onClick={() => void remove()}>지우기</Button>
+          <Button kind="secondary" full disabled={busy} onClick={() => setAsking(false)}>그대로 두기</Button>
+        </Sheet>
+      )}
+    </>
   );
 }
 

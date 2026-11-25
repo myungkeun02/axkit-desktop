@@ -6,7 +6,7 @@ import { errorText, hasFeature, hasView, viewActions } from '../core/api';
 import { clock, dollars, duration, relative, shiftMonth, upcoming, won, ymd } from '../core/format';
 import { connectionLabel } from '../core/session';
 import {
-  canToggle, type AutonomyView, type BlocksView, rowMessage, type HardwareView, type Job, type JobsView, type ModelTiersView,
+  canToggle, type AutonomyView, type BlocksView, rowMessage, rowQuery, type HardwareView, type Job, type JobsView, type ModelTiersView,
   type Provider, type ProvidersView, type Routine, type RoutinesView, type Recording, type RecordingsView, type SpendEntry, type SpendingView, type UsageView,
 } from '../core/views';
 import { Button, CardHeader, Check, Icon, KV, List, Loaded, Markdown, MenuRow, Meter, Panel, Row, Segmented, Sheet, Spinner, Switch, useLoad } from '../ui/kit';
@@ -829,7 +829,24 @@ export function Recordings() {
 // ---------- 서버가 그리는 화면 (R9) ----------
 export function Blocks({ name }: { name: string }) {
   const { session } = useApp();
-  const [state, reload] = useLoad(() => session.api.view<BlocksView>(name), [name]);
+  // §38: rows with a `query` open the same screen with it (folders); the queries opened so far, for 뒤로.
+  const [trail, setTrail] = useState<{ name: string; queries: Record<string, string>[] }>({ name, queries: [] });
+  const queries = trail.name === name ? trail.queries : [];
+  const current = queries[queries.length - 1];
+  const key = JSON.stringify(current ?? null);
+  const [state, reload] = useLoad(() => session.api.view<BlocksView>(name, current), [name, key]);
+  const open = (q: Record<string, string>) => setTrail({ name, queries: Object.keys(q).length ? [...queries, q] : [] });
+  const back = () => setTrail({ name, queries: queries.slice(0, -1) });
+  useEffect(() => {
+    if (!queries.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable;
+      if ((e.metaKey && e.key === '[') || (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'Backspace')) { e.preventDefault(); back(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const [forgetting, setForgetting] = useState<{ title: string; detail?: string } | null>(null);
   // §20 알아 둔 사이트: a site row can be forgotten. The Mac has no action for it, so it is asked for in chat.
   const isSites = (title?: string) => name === 'ways' && (title === '사이트' || title === 'Sites');
@@ -837,6 +854,14 @@ export function Blocks({ name }: { name: string }) {
     <Loaded value={state} retry={reload}>
       {(v) => (
         <>
+          {queries.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <Button kind="secondary" small onClick={back} title="뒤로 (⌘[ 또는 Backspace)">
+                <span style={{ width: 12, height: 12, display: 'inline-flex' }}><Icon.back /></span> 뒤로
+              </Button>
+              {queries.length > 1 && <button className="btn plain small" onClick={() => setTrail({ name, queries: [] })}>처음으로</button>}
+            </div>
+          )}
           {v.blocks.map((b, i) => {
             switch (b.kind) {
               case 'text': return <div key={i} className="secondary" style={{ padding: '0 4px' }}><Markdown source={b.text ?? ''} /></div>;
@@ -845,9 +870,11 @@ export function Blocks({ name }: { name: string }) {
                 <Panel key={i}>
                   {b.title && <CardHeader title={b.title} />}
                   <List>{(b.rows ?? []).map((r, j) => {
-                    const message = rowMessage(r);
-                    return <Row key={j} title={r.title} detail={r.detail} chevron={!!message}
-                      onClick={message ? () => { session.send(message, ''); session.say('비서에게 부탁했어요'); } : undefined}
+                    // §38: query (open in place) wins over message (ask in chat).
+                    const query = rowQuery(r);
+                    const message = query ? undefined : rowMessage(r);
+                    return <Row key={j} title={r.title} detail={r.detail} chevron={!!query || !!message}
+                      onClick={query ? () => open(query) : message ? () => { session.send(message, ''); session.say('비서에게 부탁했어요'); } : undefined}
                       trailing={isSites(b.title) ? <span onClick={(e) => e.stopPropagation()}><Button kind="danger" small onClick={() => setForgetting(r)}>잊기</Button></span> : r.trailing ? <span className="footnote">{r.trailing}</span> : undefined} />;
                   })}</List>
                 </Panel>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allTeams, botFor, modelLine, rowMessage, teamModels, groupForMeeting, showsMeeting, teamFor, teamMembers, type BotsView } from './views';
+import { allTeams, botFor, modelLine, rowMessage, rowQuery, teamModels, groupForMeeting, showsMeeting, teamFor, teamMembers, type BotsView } from './views';
 
 const bots: BotsView = {
   groups: [
@@ -53,5 +53,16 @@ describe('bot models', () => {
     expect(teamModels([{ model: 'Opus · 구독' }, { model: 'Opus · 구독' }, {}])).toBe('Opus · 구독');
     expect(teamModels([{ model: 'a' }, { model: 'b' }, { model: 'c' }, { model: 'd' }])).toBe('a / b 외 2');
     expect(teamModels([{}])).toBe('');
+  });
+});
+
+describe('rowQuery (§38)', () => {
+  it('turns a row query into view parameters', () => {
+    expect(rowQuery({ title: '기획', query: { mode: 'tree', source: 'my', folder: 'f1', depth: 2, shared: false } }))
+      .toEqual({ mode: 'tree', source: 'my', folder: 'f1', depth: '2', shared: 'false' });
+    expect(rowQuery({ title: '처음', query: {} })).toEqual({});
+    expect(rowQuery({ title: 'x', query: { a: { b: 1 }, c: null } })).toEqual({});
+    expect(rowQuery({ title: '파일' })).toBeUndefined();
+    expect(rowQuery({ title: 'x', query: ['a'] })).toBeUndefined();
   });
 });
