@@ -1,6 +1,7 @@
-import { lazy, useState, Suspense } from 'react';
+import { lazy, useEffect, useMemo, useState, Suspense } from 'react';
 import { useApp } from '../app/context';
 import { viewActions } from '../core/api';
+import { CALENDARS_LIMITED, calendarColor, calendarName, decodeCalendars, eventCalendarLabel, eventColor, writableCalendars, type CalendarInfo } from '../core/calendars';
 import { clock, fromZoneLocal, monthCells, monthTitle, shiftMonth, toZoneLocal, ymd } from '../core/format';
 import type { CalendarDay, CalendarView } from '../core/views';
 import { BotAvatar } from '../ui/BotAvatar';
@@ -19,6 +20,13 @@ export function Calendar() {
   const [adding, setAdding] = useState(false);
   const [state, reload] = useLoad(() => session.api.view<CalendarView>('calendar', { month }), [month]);
   const canAdd = viewActions(session.capabilities, 'calendar').includes('add');
+  const loaded = state.state === 'loaded' ? state.value : undefined;
+  // The calendar list does not change month to month; keep the last one so the add form has it while loading.
+  const [lastCalendars, setLastCalendars] = useState<CalendarInfo[]>([]);
+  const fresh = useMemo(() => (loaded ? decodeCalendars(loaded.calendars) : null), [loaded]);
+  useEffect(() => { if (fresh) setLastCalendars(fresh); }, [fresh]);
+  const calendars = fresh ?? lastCalendars;
+  const multi = calendars.length > 1;
 
   const shift = (n: number) => {
     const m = shiftMonth(month, n);
@@ -58,7 +66,7 @@ export function Calendar() {
                         aria-label={`${Number(date.slice(5, 7))}월 ${day}일${data?.events.length ? `, 일정 ${data.events.length}개` : ''}${data?.done.length ? `, 한 일 ${data.done.length}개` : ''}`}>
                         <span className="n">{day}</span>
                         <span className="dots">
-                          {data?.events.length ? <span style={{ background: 'var(--accent)' }} /> : null}
+                          {data?.events.length ? eventDots(data.events, calendars).map((c) => <span key={c} style={{ background: c }} />) : null}
                           {data?.done.length ? <span style={{ background: 'var(--green)' }} /> : null}
                         </span>
                       </button>
@@ -66,24 +74,33 @@ export function Calendar() {
                   })}
                 </div>
               </Panel>
-              <div className="footnote" style={{ display: 'flex', gap: 16, paddingLeft: 4 }}>
-                <span><span className="dot" style={{ background: 'var(--accent)', marginRight: 6 }} />일정</span>
+              <div className="footnote" style={{ display: 'flex', flexWrap: 'wrap', columnGap: 16, rowGap: 4, paddingLeft: 4 }}>
+                {multi ? calendars.map((c) => (
+                  <span key={c.id} title={c.description}><span className="dot" style={{ background: calendarColor(c.id), marginRight: 6 }} />{calendarName(c, calendars)}</span>
+                )) : <span><span className="dot" style={{ background: 'var(--accent)', marginRight: 6 }} />일정</span>}
                 <span><span className="dot" style={{ background: 'var(--green)', marginRight: 6 }} />한 일</span>
               </div>
+              {loaded?.calendarsLimited && <div className="footnote" style={{ paddingLeft: 4 }}>{CALENDARS_LIMITED}</div>}
             </div>
             <Loaded value={state} retry={reload}>
-              {(data) => <DayDetail date={selected} day={data.days.find((d) => d.date === selected)} />}
+              {(data) => <DayDetail date={selected} day={data.days.find((d) => d.date === selected)} calendars={calendars} />}
             </Loaded>
           </div>
           {state.state === 'loaded' && state.value.days.find((d) => d.date === selected)?.events.some((e) => e.geo) && <Suspense fallback={null}><DayRoutes key={selected} date={selected} /></Suspense>}
         </div>
       </div>
-      {adding && <NewEvent day={selected} onClose={() => setAdding(false)} onAdded={(d) => { setSelected(d); setMonth(d.slice(0, 7)); void reload(); }} />}
+      {adding && <NewEvent day={selected} calendars={calendars} onClose={() => setAdding(false)} onAdded={(d) => { setSelected(d); setMonth(d.slice(0, 7)); void reload(); }} />}
     </>
   );
 }
 
-function DayDetail({ date, day }: { date: string; day?: CalendarDay }) {
+/** Up to three dot colors for a day's events: one per calendar, or the plain accent when events carry no calendar. */
+function eventDots(events: CalendarDay['events'], calendars: CalendarInfo[]): string[] {
+  const colors = [...new Set(events.map((e) => eventColor(e, calendars) ?? 'var(--accent)'))];
+  return colors.slice(0, 3);
+}
+
+function DayDetail({ date, day, calendars }: { date: string; day?: CalendarDay; calendars: CalendarInfo[] }) {
   const { session } = useApp();
   const events = day?.events ?? [];
   const done = day?.done ?? [];
@@ -100,6 +117,9 @@ function DayDetail({ date, day }: { date: string; day?: CalendarDay }) {
                 <span className="secondary" style={{ width: 76, flex: 'none', fontVariantNumeric: 'tabular-nums' }}>{e.allDay ? '종일' : clock(e.start)}</span>
                 <div>
                   <div style={{ fontWeight: 500 }}>{e.title}</div>
+                  {e.calendar && (
+                    <div className="footnote"><span className="dot" style={{ background: eventColor(e, calendars), marginRight: 6 }} />{eventCalendarLabel(e)}</div>
+                  )}
                   {e.place && <div className="footnote">{e.place}{e.geo?.address ? ` · ${e.geo.address}` : ''}</div>}
                 </div>
               </div>
@@ -132,7 +152,7 @@ function DayDetail({ date, day }: { date: string; day?: CalendarDay }) {
 const kstLocal = toZoneLocal;
 const fromKstLocal = fromZoneLocal;
 
-function NewEvent({ day, onClose, onAdded }: { day: string; onClose: () => void; onAdded: (day: string) => void }) {
+function NewEvent({ day, calendars, onClose, onAdded }: { day: string; calendars: CalendarInfo[]; onClose: () => void; onAdded: (day: string) => void }) {
   const { session } = useApp();
   const hour = Math.min(Number(toZoneLocal(Date.now()).slice(11, 13)) + 1, 23);
   const initial = fromZoneLocal(`${day}T${String(hour).padStart(2, '0')}:00`).getTime();
@@ -143,6 +163,8 @@ function NewEvent({ day, onClose, onAdded }: { day: string; onClose: () => void;
   const [end, setEnd] = useState(kstLocal(initial + 3600_000));
   const [startDay, setStartDay] = useState(day);
   const [saving, setSaving] = useState(false);
+  const writable = writableCalendars(calendars);
+  const [calendarId, setCalendarId] = useState(writable[0]?.id ?? '');
   const badRange = !allDay && fromKstLocal(end) < fromKstLocal(start);
 
   const save = async () => {
@@ -150,9 +172,11 @@ function NewEvent({ day, onClose, onAdded }: { day: string; onClose: () => void;
     const body: Record<string, unknown> = { title: title.trim(), allDay, start: allDay ? startDay : fromKstLocal(start).toISOString() };
     if (!allDay) body.end = fromKstLocal(end).toISOString();
     if (place.trim()) body.place = place.trim();
+    if (writable.length > 1 && calendarId) body.calendar = calendarId;
     try {
-      await session.api.viewAction('calendar', 'add', body);
-      session.say('캘린더에 넣었어요');
+      const res = await session.api.viewAction<{ calendar?: string }>('calendar', 'add', body);
+      const into = typeof res?.calendar === 'string' && res.calendar.trim() ? res.calendar.trim() : '';
+      session.say(into ? `${into}에 넣었어요` : '캘린더에 넣었어요');
       onAdded(allDay ? startDay : start.slice(0, 10));
       onClose();
     } catch (e) {
@@ -187,6 +211,17 @@ function NewEvent({ day, onClose, onAdded }: { day: string; onClose: () => void;
         )}
         {badRange && <div className="footnote red">끝이 시작보다 빨라요.</div>}
       </Panel>
+      {writable.length > 1 && (
+        <Panel>
+          <div className="row">
+            <div className="grow">캘린더</div>
+            <span className="dot" style={{ background: calendarColor(calendarId), marginRight: 8 }} />
+            <select className="field" style={{ width: 220 }} value={calendarId} onChange={(e) => setCalendarId(e.target.value)} aria-label="캘린더">
+              {writable.map((c) => <option key={c.id} value={c.id}>{calendarName(c, calendars)}{c.primary ? ' (기본)' : ''}</option>)}
+            </select>
+          </div>
+        </Panel>
+      )}
       <Button kind="primary" full busy={saving} disabled={!title.trim() || badRange} onClick={() => void save()}>캘린더에 넣기</Button>
     </Sheet>
   );

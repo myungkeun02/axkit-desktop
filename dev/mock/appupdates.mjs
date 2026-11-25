@@ -1,8 +1,15 @@
 // §32 앱 업데이트: feature `app-updates`, view `app-updates` {desktop?: {build, versionName, builtAt, sha256, size}}.
 // Nothing is offered until /dev/update?build=<N> (a bigger N than the app's build shows "새 버전이 있어요");
 // /dev/update clears it. The zip itself is not served (바꾸기 only works in the real app).
+// The public GitHub release: /dev/update?release=<N> makes /m/dev/release.json (what the preview reads in place of
+// releases/latest/download/ax-kit-desktop.json) offer build N; without it that answers 404 like a repo with no release.
 
 let build = 0;
+let release = 0;
+
+export function releaseJson() {
+  return release ? { build: release, versionName: `0.1.${release}`, builtAt: new Date().toISOString(), sha256: 'cd'.repeat(32), size: 4_150_000 } : null;
+}
 
 export async function augment({ path, json }) {
   if (path !== 'capabilities' || !json?.ok) return json;
@@ -12,6 +19,7 @@ export async function augment({ path, json }) {
 
 export function devReset(params = new URLSearchParams()) {
   build = Number(params.get('build') ?? 0) || 0;
+  release = Number(params.get('release') ?? 0) || 0;
 }
 
 export async function handle({ req, res, path, send }) {

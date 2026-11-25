@@ -8,7 +8,7 @@ import { Timeline } from './timeline';
 import { channelsOf, type BotsView, type Channel } from './views';
 import { decodeWork, type WorkView } from './work';
 import { decodePlan, type PlanStatus } from './teamPlan';
-import { decodeDesktopBuild, newerBuild, type DesktopBuild } from './appUpdate';
+import { decodeDesktopBuild, decodeReleaseBuild, pickUpdate, type DesktopBuild } from './appUpdate';
 
 // Everything the screens share: connection, the live stream, catch-up, the timeline and the outbox.
 // No React and no Tauri here — the platform is passed in, so this is tested with fakes.
@@ -315,13 +315,21 @@ export class Session {
     } catch { /* keep what we had */ }
   }
 
-  /** §32: at start, after a reconnect and once a day (main.tsx). */
+  /** The public GitHub release check (set in main.tsx inside the app; absent in the browser preview). */
+  checkRelease: (() => Promise<unknown>) | null = null;
+  /** What the last check of each source found (a failed check keeps the last answer). */
+  private offers: { mac: DesktopBuild | null; github: DesktopBuild | null } = { mac: null, github: null };
+
+  /** §32 and the GitHub release: at start, after a reconnect and once a day (main.tsx). */
   async refreshUpdate(redraw = true) {
-    if (!hasFeature(this.capabilities, 'app-updates')) { this.update = null; return; }
-    try {
-      const next = newerBuild(decodeDesktopBuild(await this.api.view('app-updates')), this.appBuild);
-      if (next?.build !== this.update?.build) { this.update = next; if (redraw) this.changed(); }
-    } catch { /* keep what we had */ }
+    const mac = hasFeature(this.capabilities, 'app-updates')
+      ? this.api.view('app-updates').then((d) => { const b = decodeDesktopBuild(d); return b ? { ...b, source: 'mac' as const } : null; }, () => this.offers.mac)
+      : Promise.resolve(null);
+    const github = this.checkRelease ? this.checkRelease().then(decodeReleaseBuild, () => this.offers.github) : Promise.resolve(null);
+    const [m, g] = await Promise.all([mac, github]);
+    this.offers = { mac: m, github: g };
+    const next = pickUpdate(m, g, this.appBuild);
+    if (next?.build !== this.update?.build || next?.source !== this.update?.source) { this.update = next; if (redraw) this.changed(); }
   }
 
   async refreshWork(redraw = true) {

@@ -14,6 +14,7 @@ import { Home } from './screens/Home';
 import { Projects } from './screens/Projects';
 import { TeamPlanScreen } from './screens/TeamPlan';
 import { Help, Welcome } from './screens/Connect';
+import { PhoneApps } from './screens/PhoneApps';
 import { PairLinkSheet } from './screens/PairLink';
 import { WorkScreen } from './screens/Work';
 import { PeopleScreen } from './screens/People';
@@ -117,6 +118,7 @@ function useDestinations(): Dest[] {
     ...sec('health', '상태 점검', '맥', Icon.check2, has('health')),
     ...sec('settings', '설정 및 연결', '맥', Icon.mac),
     ...sec('projects', '프로젝트 가져오기', '맥', Icon.box, hasFeature(caps, 'projects') && has('projects')),
+    ...sec('phone-apps', '휴대폰 앱 설치', '맥', Icon.phone),
     ...sec('help', '도움말', '맥', Icon.info),
     ...caps.views.filter((v) => v.ui === 'blocks').flatMap((v) => sec(`blocks:${v.name}`, v.title ?? v.name, '새 기능', iconFor(v.icon))),
   );
@@ -196,7 +198,7 @@ function Shell() {
         </button>
       </aside>
       <main className="main">
-        {session.connection === 'none' && nav.section !== 'settings' && nav.section !== 'help' ? <Welcome /> : <Screen />}
+        {session.connection === 'none' && nav.section !== 'settings' && nav.section !== 'help' && nav.section !== 'phone-apps' ? <Welcome /> : <Screen />}
       </main>
       {palette && <Palette dests={dests} onClose={() => setPalette(false)} />}
       {adding !== null && <AddTeamSheet groupId={adding || undefined} onClose={() => setAdding(null)} />}
@@ -233,6 +235,7 @@ function Screen() {
     case 'first-look': return <SectionPage title="처음 알아보기"><FirstLookScreen /></SectionPage>;
     case 'work': return <SectionPage title="하고 있는 일"><WorkScreen /></SectionPage>;
     case 'people': return <SectionPage title="사람"><PeopleScreen /></SectionPage>;
+    case 'phone-apps': return <SectionPage title="휴대폰 앱 설치"><PhoneApps /></SectionPage>;
     case 'help': return <SectionPage title="도움말: 처음 쓰는 법"><Help /></SectionPage>;
     default: {
       const name = s.slice('blocks:'.length);

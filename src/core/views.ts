@@ -3,7 +3,7 @@
 
 export interface TodayView {
   date: string;
-  events: { title: string; start: string; end?: string; allDay?: boolean }[] | null;
+  events: { title: string; start: string; end?: string; allDay?: boolean; /** §36 */ calendar?: string; account?: string }[] | null;
   todos: { text: string; due?: string; source?: string }[] | null;
   pendingCards?: number;
   replies?: { from: string; text: string; source?: string; at?: string }[] | null;
@@ -56,10 +56,10 @@ export interface DocLink { from: string; to: string; label?: string }
 export interface DocGraphView { layers: DocLayer[]; nodes: DocNode[]; links: DocLink[] }
 export interface DocumentDetail { id: string; title: string; layer?: string; markdown: string; updatedAt?: string; related?: { id: string; title: string }[] }
 
-export interface CalendarEvent { id: string; title: string; start: string; end?: string; allDay?: boolean; place?: string; /** D7 */ geo?: { lat: number; lng: number; address?: string } }
+export interface CalendarEvent { id: string; title: string; start: string; end?: string; allDay?: boolean; place?: string; /** §36 */ calendar?: string; account?: string; /** D7 */ geo?: { lat: number; lng: number; address?: string } }
 export interface CalendarDone { id: string; title: string; at: string; bot?: { id: string; name: string }; detail?: string }
 export interface CalendarDay { date: string; events: CalendarEvent[]; done: CalendarDone[] }
-export interface CalendarView { month: string; timezone?: string; days: CalendarDay[] }
+export interface CalendarView { month: string; timezone?: string; days: CalendarDay[]; /** §36 */ calendars?: unknown; calendarsLimited?: boolean }
 
 export interface Job {
   id: string; name: string; detail?: string; scheduleLabel?: string; enabled: boolean; running?: boolean;

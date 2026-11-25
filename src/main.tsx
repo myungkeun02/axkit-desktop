@@ -4,7 +4,7 @@ import { App } from './App';
 import { recorder } from './app/recorder';
 import type { OutboxStorage, Pending } from './core/outbox';
 import { Session, type ReadStorage } from './core/session';
-import { isWidgetWindow, notificationsOn, notify, tauriPlatform, widgetPlatform } from './platform/tauri';
+import { checkRelease, isWidgetWindow, notificationsOn, notify, tauriPlatform, widgetPlatform } from './platform/tauri';
 import { Widget } from './screens/Widget';
 import { NoteLimiter, noteFor } from './core/notify';
 import './ui/styles.css';
@@ -35,6 +35,10 @@ const inTauri = '__TAURI_INTERNALS__' in window;
 const platform = inTauri || !import.meta.env.DEV ? (widget ? widgetPlatform : tauriPlatform) : (await import('./platform/browser')).browserPlatform;
 const session = new Session(platform, storage, reads);
 session.appBuild = __APP_BUILD__;
+// The public release on GitHub; the browser preview reads the mock's stand-in (/dev/update?release=N).
+session.checkRelease = inTauri ? checkRelease
+  : import.meta.env.DEV ? () => fetch('/m/dev/release.json').then((r) => (r.ok ? r.json() : Promise.reject(r.status))) : null;
+if (!widget) void session.refreshUpdate();
 // §32: the Mac may have built a newer copy of this app; look once a day (and on every connect, session.ts).
 if (!widget) setInterval(() => void session.refreshUpdate(), 24 * 3600 * 1000);
 

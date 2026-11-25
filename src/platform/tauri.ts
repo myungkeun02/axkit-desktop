@@ -149,4 +149,7 @@ export const onPairLink = (cb: (l: OpenedPairLink) => void) => (inTauri() ? list
 export const cancelDictation = () => (inTauri() ? invoke('cancel_dictation').catch(() => {}) : Promise.resolve());
 
 /** §32 바꾸기: Rust fetches and checks the Mac's build, starts the swap helper and quits (an error comes back as words). */
+/** The public release's json (Rust fetches it; the page only reads the numbers). */
+export const checkRelease = (): Promise<unknown> => (inTauri() ? invoke('check_release') : Promise.reject('미리보기'));
+export const installRelease = (build: number) => (inTauri() ? invoke('install_release', { build }) : Promise.reject('미리보기에서는 앱을 바꿀 수 없어요.'));
 export const installUpdate = (sha256: string) => (inTauri() ? invoke('install_update', { sha256 }) : Promise.reject('미리보기에서는 앱을 바꿀 수 없어요.'));

@@ -7,7 +7,7 @@ export type Section =
   | 'docs' | 'calendar' | 'recordings'
   | 'autonomy' | 'routines' | 'jobs' | 'spending'
   | 'usage' | 'providers' | 'modeltiers'
-  | 'hardware' | 'health' | 'settings' | 'projects' | 'team-plan' | 'help' | 'work' | 'first-look' | 'people'
+  | 'hardware' | 'health' | 'settings' | 'projects' | 'team-plan' | 'help' | 'phone-apps' | 'work' | 'first-look' | 'people'
   | `blocks:${string}`;
 
 export interface Nav {

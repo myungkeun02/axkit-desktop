@@ -6,6 +6,7 @@ import { clock, ymd } from '../core/format';
 import type { TodayView } from '../core/views';
 import { CardHeader, List, Loaded, Panel, Row, useLoad } from '../ui/kit';
 import { CardPanel } from './Approvals';
+import { eventCalendarLabel } from '../core/calendars';
 import { Banners } from './Banners';
 import { ChatRoom } from './Chat';
 
@@ -99,7 +100,7 @@ function Today() {
             <CardHeader title="일정" />
             <List>
               {t.events?.length ? t.events.map((e, i) => (
-                <Row key={i} title={e.title} trailing={<span className="secondary small">{e.allDay ? '종일' : clock(e.start)}</span>} />
+                <Row key={i} title={e.title} detail={e.calendar ? eventCalendarLabel(e) : undefined} trailing={<span className="secondary small">{e.allDay ? '종일' : clock(e.start)}</span>} />
               )) : <Row title={<span className="secondary">{t.events === null ? '캘린더가 아직 연결되지 않았어요' : '남은 일정이 없어요'}</span>} />}
             </List>
           </Panel>

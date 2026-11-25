@@ -228,6 +228,29 @@ async fn install_update(app: AppHandle, state: State<'_, AppState>, sha256: Stri
     Ok(())
 }
 
+/// The public release's description (`releases/latest/download/ax-kit-desktop.json`); the page compares its build.
+#[tauri::command]
+async fn check_release() -> Result<update::ReleaseInfo, String> {
+    update::latest_release().await
+}
+
+/// 바꾸기 from GitHub: the json is read again (so the zip matches what is latest now), the zip must have its size
+/// and sha256, then the same check-and-swap as `install_update`.
+#[tauri::command]
+async fn install_release(app: AppHandle, build: u64) -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|_| "앱이 있는 곳을 찾지 못했어요.".to_string())?;
+    let dest = update::running_bundle(&exe).ok_or_else(|| "개발 중인 앱은 이렇게 바꿀 수 없어요.".to_string())?;
+    let (info, zip) = update::download_release(build).await?;
+    let ready = tauri::async_runtime::spawn_blocking(move || update::prepare(&zip, &info.sha256, dest)).await.map_err(|_| "새 버전을 확인하지 못했어요.".to_string())??;
+    update::hand_over(&ready)?;
+    let quit = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        quit.exit(0);
+    });
+    Ok(())
+}
+
 const DICTATION_CANCELLED: &str = "받아쓰기를 그만뒀어요.";
 static DICTATION_CANCEL: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>> = std::sync::Mutex::new(None);
 
@@ -472,7 +495,7 @@ pub fn run() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![connection, reconnect, use_mock, use_local, api, upload, get_file, open_link, set_attention, notify, save_file, preview_file, reveal_file, live_start, live_stop, live_frame, stream_start, stream_stop, stream_ensure, stream_nudge, widget_pin, widget_hide, widget_open_main, pair_remote, forget_remote, take_pair_link, cancel_dictation, install_update])
+        .invoke_handler(tauri::generate_handler![connection, reconnect, use_mock, use_local, api, upload, get_file, open_link, set_attention, notify, save_file, preview_file, reveal_file, live_start, live_stop, live_frame, stream_start, stream_stop, stream_ensure, stream_nudge, widget_pin, widget_hide, widget_open_main, pair_remote, forget_remote, take_pair_link, cancel_dictation, install_update, check_release, install_release])
         .build(tauri::generate_context!())
         .expect("error while building ax-kit")
         .run(|app, event| match event {

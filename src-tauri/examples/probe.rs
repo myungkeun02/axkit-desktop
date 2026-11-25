@@ -43,6 +43,24 @@ async fn main() {
         conn.forget_remote().await;
         return;
     }
+    // `--release <folder>`: the GitHub release — read the json, fetch the zip (size), check and unpack it (sha256,
+    // bundle id, signature) and run the swap helper on <folder>/ax-kit.app (nothing is opened).
+    if std::env::args().nth(1).as_deref() == Some("--release") {
+        let folder = std::path::PathBuf::from(std::env::args().nth(2).expect("folder"));
+        let info = axkit_desktop_lib::update::latest_release().await.expect("json");
+        println!("latest → build {} {} {} bytes", info.build, info.version_name, info.size);
+        println!("newer than offered? → {:?}", axkit_desktop_lib::update::download_release(info.build + 1).await.err());
+        let (info, zip) = axkit_desktop_lib::update::download_release(info.build).await.expect("zip");
+        println!("zip → {} bytes (json said {})", zip.len(), info.size);
+        println!("wrong size → {:?}", axkit_desktop_lib::update::same_size(info.size + 1, &zip).err());
+        let ready = axkit_desktop_lib::update::prepare(&zip, &info.sha256, folder.join("ax-kit.app")).expect("prepare");
+        println!("unpacked → {}", ready.new_app.display());
+        let script = ready.tmp.join("swap-test.sh");
+        std::fs::write(&script, axkit_desktop_lib::update::helper_script().replace("open \"$DEST\"", "true")).unwrap();
+        let ok = std::process::Command::new("/bin/sh").arg(&script).arg("999999").arg(&ready.new_app).arg(&ready.dest).arg(&ready.tmp).status().unwrap();
+        println!("helper → {ok}; quarantine: {:?}", std::process::Command::new("/usr/bin/xattr").arg("-p").arg("com.apple.quarantine").arg(&ready.dest).output().map(|o| o.status.success()));
+        return;
+    }
     // `--pair "<axkit://pair?… link>"`: pair like "다른 맥의 비서에 연결" (token kept in memory, not the Keychain), then probe.
     let pair_link = (std::env::args().nth(1).as_deref() == Some("--pair")).then(|| std::env::args().nth(2).unwrap_or_default());
     let conn = if pair_link.is_some() { Connection::with_vault(Box::new(remote::Memory::default())) } else { Connection::new() };

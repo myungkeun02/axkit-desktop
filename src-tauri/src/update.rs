@@ -9,6 +9,68 @@ use std::process::Command;
 
 pub const BUNDLE_ID: &str = "dev.axkit.desktop";
 
+/// The public release (no Developer ID: the swap helper clears quarantine the way the installer does).
+pub const RELEASE_BASE: &str = "https://github.com/myungkeun02/axkit-desktop/releases/latest/download";
+pub const RELEASE_JSON: &str = "ax-kit-desktop.json";
+pub const RELEASE_ZIP: &str = "ax-kit-desktop.zip";
+
+/// The release's description of its zip: only what the update needs, checked before anything is downloaded.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ReleaseInfo {
+    pub build: u64,
+    #[serde(rename = "versionName", default)]
+    pub version_name: String,
+    #[serde(rename = "builtAt", default)]
+    pub built_at: String,
+    pub sha256: String,
+    pub size: u64,
+}
+
+pub fn parse_release(text: &str) -> Result<ReleaseInfo, String> {
+    let info: ReleaseInfo = serde_json::from_str(text).map_err(|_| "새 버전 정보를 읽지 못했어요.".to_string())?;
+    let hex = info.sha256.len() == 64 && info.sha256.chars().all(|c| c.is_ascii_hexdigit());
+    if info.build == 0 || info.size == 0 || info.size > 200 * 1024 * 1024 || !hex {
+        return Err("새 버전 정보가 이상해요.".into());
+    }
+    Ok(info)
+}
+
+async fn release_get(secs: u64, name: &str) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(secs))
+        .user_agent("ax-kit-desktop")
+        .build()
+        .map_err(|_| "인터넷 연결을 준비하지 못했어요.".to_string())?;
+    let reply = client.get(format!("{RELEASE_BASE}/{name}")).send().await.map_err(|_| "GitHub에 닿지 못했어요. 인터넷 연결을 확인해 주세요.".to_string())?;
+    match reply.status().as_u16() {
+        200 => reply.bytes().await.map(|b| b.to_vec()).map_err(|_| "새 버전을 받다가 끊겼어요.".to_string()),
+        404 => Err("GitHub에 아직 올라온 버전이 없어요.".into()),
+        _ => Err("GitHub에서 새 버전을 받지 못했어요. 조금 뒤에 다시 해 주세요.".into()),
+    }
+}
+
+/// `releases/latest/download/ax-kit-desktop.json` (redirects followed).
+pub async fn latest_release() -> Result<ReleaseInfo, String> {
+    parse_release(&String::from_utf8_lossy(&release_get(20, RELEASE_JSON).await?))
+}
+
+/// The json read again (so the zip matches what is latest now, and at least the build the owner was offered), then
+/// the zip, which must have exactly the json's size. The sha256 is checked by `prepare`.
+pub async fn download_release(at_least: u64) -> Result<(ReleaseInfo, Vec<u8>), String> {
+    let info = latest_release().await?;
+    if info.build < at_least {
+        return Err("GitHub의 최신 버전이 바뀌었어요. 다시 확인해 주세요.".into());
+    }
+    let zip = release_get(300, RELEASE_ZIP).await?;
+    same_size(info.size, &zip)?;
+    Ok((info, zip))
+}
+
+/// The zip must be exactly the size the release said (the sha256 is checked after).
+pub fn same_size(expected: u64, bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() as u64 == expected { Ok(()) } else { Err("받은 파일 크기가 새 버전 정보와 달라요. 다시 받아 볼게요.".into()) }
+}
+
 /// The `.app` this process runs from (`…/ax-kit.app/Contents/MacOS/ax-kit-desktop` → `…/ax-kit.app`).
 pub fn running_bundle(exe: &Path) -> Option<PathBuf> {
     let bundle = exe.parent()?.parent()?.parent()?;
@@ -73,7 +135,7 @@ pub fn prepare(zip_bytes: &[u8], sha256: &str, dest: PathBuf) -> Result<Ready, S
     let zip = tmp.join("ax-kit-desktop.zip");
     std::fs::write(&zip, zip_bytes).map_err(|_| fail("받은 파일을 저장하지 못했어요."))?;
     if !same_sha(sha256, &sha256_of(&zip).map_err(|e| fail(&e))?) {
-        return Err(fail("받은 파일이 맥이 알려 준 것과 달라요. 다시 받아 볼게요."));
+        return Err(fail("받은 파일이 새 버전 정보와 달라요. 다시 받아 볼게요."));
     }
     let out = tmp.join("unpacked");
     let ok = Command::new("/usr/bin/ditto").args(["-x", "-k"]).arg(&zip).arg(&out).status().map(|s| s.success()).unwrap_or(false);
@@ -123,6 +185,18 @@ mod tests {
     fn finds_the_running_bundle() {
         assert_eq!(running_bundle(Path::new("/Applications/ax-kit.app/Contents/MacOS/ax-kit-desktop")), Some(PathBuf::from("/Applications/ax-kit.app")));
         assert_eq!(running_bundle(Path::new("/Users/me/dev/ax-kit-desktop/src-tauri/target/debug/ax-kit-desktop")), None);
+    }
+
+    #[test]
+    fn reads_the_release_json() {
+        let ok = r#"{"build":41,"versionName":"0.1.41","builtAt":"2026-11-24T09:13:46.800Z","sha256":"71165b8e43ff73ee085d317f9d960ed2fa99b73e53953540ec61236f91a66b13","size":4144542}"#;
+        let info = parse_release(ok).unwrap();
+        assert_eq!((info.build, info.size, info.version_name.as_str()), (41, 4144542, "0.1.41"));
+        assert!(parse_release(r#"{"build":41,"sha256":"zz","size":1}"#).is_err());
+        assert!(parse_release(r#"{"build":0,"sha256":"71165b8e43ff73ee085d317f9d960ed2fa99b73e53953540ec61236f91a66b13","size":1}"#).is_err());
+        assert!(parse_release("<html>").is_err());
+        assert!(same_size(3, b"abc").is_ok());
+        assert!(same_size(4, b"abc").is_err());
     }
 
     #[test]
