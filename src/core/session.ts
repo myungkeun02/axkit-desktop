@@ -9,6 +9,7 @@ import { channelsOf, type BotsView, type Channel } from './views';
 import { decodeWork, type WorkView } from './work';
 import { decodePlan, type PlanStatus } from './teamPlan';
 import { decodeFirstLook, type LookStatus } from './firstLook';
+import type { BuiltTeam } from './teamFromText';
 import { decodeDesktopBuild, decodeReleaseBuild, pickUpdate, type DesktopBuild } from './appUpdate';
 
 // Everything the screens share: connection, the live stream, catch-up, the timeline and the outbox.
@@ -92,6 +93,8 @@ export class Session {
   bots: BotsView | null = null;
   /** §24: the team-structure proposal's status, or null when the server has none (or no `team-plan`). */
   teamPlan: PlanStatus | null = null;
+  /** §37: the team just made from a description; its room opens with what was built shown in 팀 설정. */
+  justBuilt: BuiltTeam | null = null;
   /** §27 처음 알아보기's status (null = unknown or no such view): the sidebar drops the entry once it is `done`. */
   firstLook: LookStatus | null = null;
   /** Bumped when the team plan may have changed elsewhere (a chat revision, a card): open plan screens read it again. */

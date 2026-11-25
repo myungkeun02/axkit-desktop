@@ -653,3 +653,6 @@ button.wp-item:hover { background: var(--accent-soft); }
 .choices.done .choice.on { opacity: 1; background: var(--accent); color: #fff; box-shadow: none; }
 .chip.accent { background: var(--accent-soft); color: var(--accent); }
 .card-talk { display: flex; flex-direction: column; gap: 6px; }
+.tier-badge.small { font-size: 0.6875rem; padding: 0 5px; }
+.model-line { margin-top: 1px; color: var(--text2); }
+.header-models { font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; min-width: 0; }

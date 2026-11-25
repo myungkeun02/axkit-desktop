@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allTeams, botFor, rowMessage, groupForMeeting, showsMeeting, teamFor, teamMembers, type BotsView } from './views';
+import { allTeams, botFor, modelLine, rowMessage, teamModels, groupForMeeting, showsMeeting, teamFor, teamMembers, type BotsView } from './views';
 
 const bots: BotsView = {
   groups: [
@@ -40,5 +40,18 @@ describe('rowMessage (§34)', () => {
     expect(rowMessage({ title: 'a' })).toBeUndefined();
     expect(rowMessage({ title: 'a', message: '   ' })).toBeUndefined();
     expect(rowMessage({ title: 'a', message: 3 as unknown as string })).toBeUndefined();
+  });
+});
+
+describe('bot models', () => {
+  it('shows the model next to the tier, or the tier alone', () => {
+    expect(modelLine({ tier: 'B', model: 'Claude Sonnet 5.5 · Claude' })).toBe('등급 B · Claude Sonnet 5.5 · Claude');
+    expect(modelLine({ tier: 'A' })).toBe('등급 A');
+    expect(modelLine({})).toBe('');
+  });
+  it('names the models of a team once', () => {
+    expect(teamModels([{ model: 'Opus · 구독' }, { model: 'Opus · 구독' }, {}])).toBe('Opus · 구독');
+    expect(teamModels([{ model: 'a' }, { model: 'b' }, { model: 'c' }, { model: 'd' }])).toBe('a / b 외 2');
+    expect(teamModels([{}])).toBe('');
   });
 });

@@ -15,6 +15,8 @@ export type Rank = 'lead' | 'staff' | 'reviewer';
 export interface Bot {
   id: string; name: string; role?: string; channel: string; status?: string; statusText?: string; isNew?: boolean; avatar?: string;
   /** R16 */ rank?: Rank; team?: string; tier?: Tier;
+  /** Which AI it runs on, e.g. "Claude Opus · Claude Code 구독" (server d219cb3; older servers send none). */
+  model?: string;
   /** §16: how this bot works (role prompt, ≤1500 chars) and who wrote it last. */
   instructions?: string; instructionsBy?: 'default' | 'ai' | 'owner';
 }
@@ -132,3 +134,12 @@ export interface Routine {
   lastRun?: string; lastResult?: string; lastOk?: boolean;
 }
 export interface RoutinesView { routines: Routine[]; followUps: { bot: { id: string; name: string }; what: string; dueAt: string }[]; limit?: number }
+
+/** "B · Claude Sonnet 5.5 · Claude", or just the tier letter, or '' — for tooltips and member lines. */
+export const modelLine = (b: Pick<Bot, 'tier' | 'model'>) => [b.tier ? `등급 ${b.tier}` : '', b.model?.trim() ?? ''].filter(Boolean).join(' · ');
+
+/** The models a team runs on, fewest words: one name when they all share it, else each once. */
+export function teamModels(members: Pick<Bot, 'model'>[]): string {
+  const names = [...new Set(members.map((m) => m.model?.trim()).filter((x): x is string => !!x))];
+  return names.length <= 2 ? names.join(' / ') : `${names.slice(0, 2).join(' / ')} 외 ${names.length - 2}`;
+}

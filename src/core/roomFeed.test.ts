@@ -99,3 +99,16 @@ describe('main-room notices that ask', () => {
     expect(entries(rows)[0].speaker.name).toBe('비서');
   });
 });
+
+describe('whole conversation (짧게 보기 off)', () => {
+  it('keeps every line in order with its speaker, nothing folded or tucked', () => {
+    const items = [notice(1, '💬 Leo → Mia · 검토 요청: 될까요?'), notice(2, '↩️ Mia → Leo · 답 (승인): 좋아요.'), ...[3, 4, 5, 6, 7, 8].map((i) => notice(i, `작업 ${i}`))];
+    const full = buildFeed(items, '개발', { lead, assistant: '비서', now, short: false });
+    expect(full.some((r) => r.kind === 'folded')).toBe(false);
+    const list = entries(full);
+    expect(list.map((e) => e.speaker.name)).toEqual(['Leo', 'Mia', 'Leo', 'Leo', 'Leo', 'Leo', 'Leo', 'Leo']);
+    expect(list.every((e) => e.replies.length === 0)).toBe(true);
+    const short = buildFeed(items, '개발', { lead, assistant: '비서', now, short: true });
+    expect(short.some((r) => r.kind === 'folded')).toBe(true);
+  });
+});

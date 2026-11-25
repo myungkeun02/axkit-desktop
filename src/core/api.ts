@@ -147,9 +147,12 @@ export class ApiClient {
   async connectProvider(id: string, apiKey: string) { await this.post(`providers/${encodeURIComponent(id)}/key`, { apiKey }); }
   async disconnectProvider(id: string) { await this.post(`providers/${encodeURIComponent(id)}/disconnect`, {}); }
 
-  async share(bytes: Uint8Array, name: string, contentType: string) {
+  /** `room`: a team or bot room's channel (header `x-channel`, feature `share-rooms`); none = the main chat. */
+  async share(bytes: Uint8Array, name: string, contentType: string, room?: string) {
     let reply: RawReply;
-    try { reply = await this.transport.upload('share', bytes, { 'content-type': contentType || 'application/octet-stream', 'x-file-name': encodeURIComponent(name) }); }
+    const headers: Record<string, string> = { 'content-type': contentType || 'application/octet-stream', 'x-file-name': encodeURIComponent(name) };
+    if (room) headers['x-channel'] = room;
+    try { reply = await this.transport.upload('share', bytes, headers); }
     catch (e) { throw toApiError(e); }
     return this.check(reply);
   }
@@ -182,4 +185,6 @@ function toApiError(e: unknown): ApiError {
 
 export const hasFeature = (c: Capabilities, f: string) => c.features.includes(f);
 export const hasView = (c: Capabilities, v: string) => c.views.some((x) => x.name === v);
+/** Sharing a file into a team or bot room (`x-channel`), not only the main chat. */
+export const canShareIn = (c: Capabilities, room: string) => hasFeature(c, 'share') && (!room || hasFeature(c, 'share-rooms'));
 export const viewActions = (c: Capabilities, v: string) => c.views.find((x) => x.name === v)?.actions ?? [];

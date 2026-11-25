@@ -44,7 +44,7 @@ struct ApiReply {
 }
 
 /// Headers the webview may set on uploads (`POST share`, recording chunks). Never `Authorization`.
-const UPLOAD_HEADERS: &[&str] = &["x-file-name", "x-chunk-total", "x-started-at", "x-duration-sec"];
+const UPLOAD_HEADERS: &[&str] = &["x-file-name", "x-chunk-total", "x-started-at", "x-duration-sec", "x-channel"];
 
 /// Headers for an upload. Tauri's raw invoke sets its own `Content-Type: application/octet-stream`, so the page
 /// sends the real type as `x-content-type` and it goes to the Mac as `content-type` (§30 needs audio/mp4).
@@ -525,10 +525,12 @@ mod upload_tests {
             "x-content-type" => Some("audio/mp4".into()),
             "content-type" => Some("application/octet-stream".into()),
             "x-file-name" => Some("a.m4a".into()),
+            "x-channel" => Some("team-dev".into()),
             _ => None,
         });
         assert!(h.contains(&("content-type".into(), "audio/mp4".into())));
         assert!(h.contains(&("x-file-name".into(), "a.m4a".into())));
+        assert!(h.contains(&("x-channel".into(), "team-dev".into())));
         assert_eq!(h.iter().filter(|(k, _)| k == "content-type").count(), 1);
         let none = super::upload_headers(|_| None);
         assert_eq!(none, vec![("content-type".to_string(), "application/octet-stream".to_string())]);

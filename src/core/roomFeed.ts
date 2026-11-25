@@ -62,11 +62,17 @@ export interface FeedOptions {
   cardDate?: (cardId: string) => string | undefined;
   now?: number;
   foldAt?: number;
+  /**
+   * 짧게 보기: replies tucked under what they answer and long runs folded into one line. Off = every line in order
+   * with its speaker (the default in team and bot rooms, where the owner wants the whole conversation).
+   */
+  short?: boolean;
 }
 
 export function buildFeed(items: readonly Item[], room: string, o: FeedOptions): Row[] {
   const now = o.now ?? Date.now();
-  const foldAt = o.foldAt ?? 4;
+  const short = o.short ?? true;
+  const foldAt = short ? o.foldAt ?? 4 : Number.POSITIVE_INFINITY;
   const roomVoice: Speaker = o.lead ?? { id: room || 'assistant', name: o.assistant };
   const botSpeaker = (a?: Author): Speaker => a ? { id: a.id, name: a.name, avatar: a.avatar } : room ? roomVoice : { id: 'assistant', name: o.assistant };
 
@@ -100,6 +106,7 @@ export function buildFeed(items: readonly Item[], room: string, o: FeedOptions):
   const merged: Unit[] = [];
   const threadRoot = new Map<string, Entry>();
   for (const u of units) {
+    if (!short) { merged.push(u); continue; }
     if (u.kind === 'entry' && u.entry.thread) {
       const root = threadRoot.get(u.entry.thread);
       if (root) root.replies.push(u.entry);

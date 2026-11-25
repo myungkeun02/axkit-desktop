@@ -2,18 +2,19 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent }
 import { cardTitle, cleanText, previewText } from '../core/chatText';
 import { buildFeed, type Entry, type Folded, type Row } from '../core/roomFeed';
 import { useApp } from '../app/context';
-import { hasFeature } from '../core/api';
+import { canShareIn, hasFeature } from '../core/api';
 import { closedLabel, opensInApp, optionsFor } from '../core/cards';
 import { answeredOption, cardEcho, liveChoicesSeq } from '../core/chatChoices';
 import type { Attachment, CardEvent, CardOption, Choice, DelegationEvent, MessageEvent, NoticeEvent } from '../core/events';
 import { clock, fileSize, subject } from '../core/format';
-import { allBots, botFor, groupForMeeting, teamFor, type BotsView } from '../core/views';
+import { allBots, botFor, groupForMeeting, modelLine, teamFor, type BotsView } from '../core/views';
 import { handsOver } from '../core/browserLive';
 import { workNoticeLabel } from '../core/work';
 import { activityLine } from '../core/activity';
 import { clockLabel, insertDictation } from '../core/dictation';
 import { insertMention, mentionAt, mentionMatches } from '../core/mention';
 import { useDictation } from '../app/dictation';
+import { useShortView } from '../app/shortView';
 import { fileUrl, openLink, previewFile, revealFile, saveFile, type SavedFile } from '../platform/tauri';
 import { BotAvatar } from '../ui/BotAvatar';
 import { Empty, Icon, Markdown } from '../ui/kit';
@@ -35,7 +36,7 @@ export function roomStyle(bots: BotsView | null, room: string, botTalk = false):
 }
 
 // ---------- one room ----------
-export function ChatRoom({ room, compactWidth, tray }: { room: string; compactWidth?: boolean; tray?: React.ReactNode }) {
+export function ChatRoom({ room, compactWidth, tray, short }: { room: string; compactWidth?: boolean; tray?: React.ReactNode; /** 짧게 보기 (default: the room's saved choice) */ short?: boolean }) {
   const { session } = useApp();
   const items = session.timeline.items(room);
   const pending = session.pendingIn(room);
@@ -47,7 +48,8 @@ export function ChatRoom({ room, compactWidth, tray }: { room: string; compactWi
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const [dragging, setDragging] = useState(false);
-  const canShare = !room && hasFeature(session.capabilities, 'share');
+  // The main chat always; a team or bot room only when the Mac files it there (`share-rooms`, else it would land in the main chat).
+  const canShare = canShareIn(session.capabilities, room);
 
   // §4 activity: "생각하는 중…" / "메일 보는 중…" under the conversation while the assistant works on it.
   const busy = session.activity.get(room);
@@ -72,14 +74,16 @@ export function ChatRoom({ room, compactWidth, tray }: { room: string; compactWi
   const onDrop = async (e: DragEvent) => {
     e.preventDefault();
     setDragging(false);
-    if (canShare) await sendFiles(session, Array.from(e.dataTransfer.files));
+    if (canShare) await sendFiles(session, Array.from(e.dataTransfer.files), room);
   };
   const lastBot = [...items].reverse().find((i) => i.kind === 'message' && i.event.role === 'assistant')?.seq;
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
   const lead = room && !meeting && bot ? { id: bot.id, name: bot.name, avatar: bot.avatar } : null;
-  const rows = useMemo(() => buildFeed(items, room, { lead, assistant: session.assistantName, cardDate: (id) => session.timeline.card(id)?.at }),
+  const [savedShort] = useShortView(room);
+  const isShort = short ?? savedShort;
+  const rows = useMemo(() => buildFeed(items, room, { lead, assistant: session.assistantName, cardDate: (id) => session.timeline.card(id)?.at, short: isShort }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, items.length, items[items.length - 1]?.seq, room, lead?.id, session.assistantName]);
+    [items, items.length, items[items.length - 1]?.seq, room, lead?.id, session.assistantName, isShort]);
   // Only the latest buttons work, until the owner answers; older ones stay, dimmed.
   const live = liveChoicesSeq(items);
   const choosing = session.choosing.filter((c) => c.room === room);
@@ -231,7 +235,7 @@ function Composer({ room, placeholder, onSent, canAttach }: { room: string; plac
         {canAttach && (
           <>
             <button className="attach-btn" onClick={() => picker.current?.click()} aria-label="사진·파일 보내기" title="사진·파일 보내기 (끌어다 놓아도 돼요, 12MB까지)"><Icon.plus /></button>
-            <input ref={picker} type="file" multiple hidden onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void sendFiles(session, files); }} />
+            <input ref={picker} type="file" multiple hidden onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ''; void sendFiles(session, files, room); }} />
           </>
         )}
         {matches.length > 0 && (
@@ -336,7 +340,8 @@ function EntryView({ e, room, faces, live, latest, onMenu, compact }: { e: Entry
       <div className="convo-body">
         {e.showHeader && (faces || e.to) && (
           <div className="convo-head">
-            <span className="bold">{e.speaker.name}</span>
+            <span className="bold" title={bot ? [e.speaker.name, modelLine(bot)].filter(Boolean).join(' · ') : undefined}>{e.speaker.name}</span>
+            {bot?.tier && <span className="tier-badge small" title={modelLine(bot)}>{bot.tier}</span>}
             {e.to && <><span className="secondary">→</span><span>{e.to}</span></>}
             {e.label && <span className="chip">{e.label}</span>}
             <span className="footnote">{clock(e.at)}</span>
@@ -441,12 +446,13 @@ function MessageMenu({ x, y, m, onDone }: { x: number; y: number; m: MessageEven
 }
 
 /** §3 `POST share`: photos and files to the assistant (12MB each). Used by the + button and drag-and-drop. */
-export async function sendFiles(session: ReturnType<typeof useApp>['session'], files: File[]) {
+export async function sendFiles(session: ReturnType<typeof useApp>['session'], files: File[], room = '') {
+  const to = room ? `${session.roomTitle(room)} 방에` : '비서에게';
   for (const file of files) {
     if (file.size > 12 * 1024 * 1024) { session.say(`${file.name}: 12MB보다 큰 파일은 보낼 수 없어요.`); continue; }
     try {
-      await session.api.share(new Uint8Array(await file.arrayBuffer()), file.name, file.type);
-      session.say(`${file.name}을(를) 비서에게 보냈어요`);
+      await session.api.share(new Uint8Array(await file.arrayBuffer()), file.name, file.type, room || undefined);
+      session.say(`${file.name}을(를) ${to} 보냈어요`);
       await session.catchUp();
     } catch (err) { session.say(err instanceof Error ? err.message : '보내지 못했어요'); }
   }

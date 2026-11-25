@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { WorkPanel } from './WorkPanel';
 import { useApp } from '../app/context';
 import { errorText, hasFeature, viewActions } from '../core/api';
-import { botFor, groupForMeeting, RANK_LABEL, teamFor, teamMembers, TIERS, type Bot, type BotsView, type Rank, type Team, type Tier } from '../core/views';
+import { botFor, groupForMeeting, modelLine, RANK_LABEL, teamModels, teamFor, teamMembers, TIERS, type Bot, type BotsView, type Rank, type Team, type Tier } from '../core/views';
 import { BotAvatar } from '../ui/BotAvatar';
 import { Button, CardHeader, List, Panel, Row, Segmented, Sheet, Switch } from '../ui/kit';
 import { Banners } from './Banners';
+import { useShortView } from '../app/shortView';
 import { canEdit, EDIT_MAX, editBotBody, moveTargets, renameTeamBody } from '../core/botEdit';
+import { decodeBuiltTeam, TEAM_TEXT_MAX, TEAM_TEXT_PLACEHOLDER, teamTextProblem, type BuiltTeam } from '../core/teamFromText';
 import { ChatRoom, ordinalOf } from './Chat';
 
 /** A team, meeting or (older server) bot room: conversation in the middle, team settings on the right. */
@@ -15,8 +17,11 @@ export function RoomScreen({ room }: { room: string }) {
   const team = teamFor(session.bots, room);
   const meeting = groupForMeeting(session.bots, room);
   const bot = botFor(session.bots, room);
-  const [settings, setSettings] = useState(false);
+  // A team just made from a description opens with 팀 설정 showing what was built.
+  const [settings, setSettings] = useState(() => !!team && session.justBuilt?.channel === room);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [short, setShort] = useShortView(room);
+  useEffect(() => { if (team && session.justBuilt?.channel === room) setSettings(true); }, [room, team?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const canMeet = viewActions(session.capabilities, 'bots').includes('meeting');
   const members = team ? teamMembers(session.bots, team) : [];
   const working = members.some((m) => m.status === 'working') || bot?.status === 'working';
@@ -28,21 +33,25 @@ export function RoomScreen({ room }: { room: string }) {
         <div className="side" />
         <h1 data-tauri-drag-region style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           {team ? <Faces bots={session.bots} ids={members.map((m) => m.id)} /> : !meeting && bot ? <BotAvatar name={bot.name} size={26} avatar={bot.avatar} status={bot.status} ordinal={ordinalOf(session.bots, room)} /> : null}
-          <span>{title}</span>
+          <span style={{ whiteSpace: 'nowrap' }}>{title}</span>
+          {team && teamModels(members) && <span className="footnote header-models" title={`이 팀 봇들이 쓰는 AI: ${teamModels(members)}`}>{teamModels(members)}</span>}
+          {!team && !meeting && bot?.model && <span className="footnote header-models" title={modelLine(bot)}>{bot.model}</span>}
           {working && <span className="footnote" style={{ fontWeight: 400 }}>일하는 중</span>}
         </h1>
         <div className="side right">
+          <button className={`pill-btn${short ? ' on' : ''}`} onClick={() => setShort(!short)} aria-pressed={short}
+            title={short ? '모든 대화를 차례대로 보기' : '답글은 질문 아래에, 긴 작업 기록과 봇끼리 대화는 한 줄로 접어서 보기'}>짧게 보기</button>
           {meeting && canMeet && <button className="pill-btn" onClick={() => setMeetingOpen(true)}>회의 열기</button>}
           {team && <button className={`pill-btn${settings ? ' on' : ''}`} onClick={() => setSettings(!settings)} aria-pressed={settings}>팀 설정</button>}
         </div>
       </header>
       <Banners />
       <div className="split">
-        <div className="split-main"><ChatRoom key={room} room={room} /></div>
+        <div className="split-main"><ChatRoom key={room} room={room} short={short} /></div>
         {!(team && settings) && <WorkPanel />}
         {team && settings && (
           <aside className="side-pane scroll" aria-label="팀 설정">
-            <TeamSettings team={team} onClose={() => setSettings(false)} />
+            <TeamSettings team={team} onClose={() => { setSettings(false); if (session.justBuilt?.channel === room) session.justBuilt = null; }} />
           </aside>
         )}
       </div>
@@ -86,6 +95,7 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
       <TeamName team={team} editable={edits.renameTeam} onClose={onClose} />
+      {session.justBuilt?.teamId === team.id && <BuiltSummary built={session.justBuilt} editable={edits.renameTeam || edits.editBot} />}
       {team.decidedBy === 'ai' && (
         <div className="note-box">AI가 정한 구성이에요{team.reason ? ` — ${team.reason}` : ''}</div>
       )}
@@ -96,9 +106,12 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
             <div key={m.id}>
               <Row title={<span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <BotAvatar name={m.name} size={30} avatar={m.avatar} status={m.status} ordinal={ordinalOf(session.bots, m.id)} />{m.name}</span>}
-                detail={[m.rank ? RANK_LABEL[m.rank] : null, m.statusText].filter(Boolean).join(' · ')}
+                detail={<>
+                  {[m.rank ? RANK_LABEL[m.rank] : null, m.statusText].filter(Boolean).join(' · ')}
+                  {m.model && <div className="footnote model-line" title="이 봇이 쓰는 AI">{m.model}</div>}
+                </>}
                 trailing={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  {m.tier && <span className="tier-badge">{m.tier}</span>}
+                  {m.tier && <span className="tier-badge" title={modelLine(m)}>{m.tier}</span>}
                   {canOpen && <span className="footnote">{open === m.id ? '접기' : edits.editBot || edits.moveBot ? '고치기' : '일하는 방식'}</span>}
                 </span>}
                 onClick={canOpen ? () => setOpen(open === m.id ? null : m.id) : undefined} />
@@ -307,7 +320,96 @@ function Stepper({ value, min, max, onChange, label }: { value: number; min: num
 }
 
 /** R16 팀 추가: company, name, purpose, 개발팀, then either set the members and grades or let the AI decide. */
+/** 팀 추가: one box to describe the team in the owner's own words (§37 createTeamFromText); the old detailed form behind a link. */
 export function AddTeamSheet({ groupId, onClose }: { groupId?: string; onClose: () => void }) {
+  const { session } = useApp();
+  const fromText = viewActions(session.capabilities, 'bots').includes('createTeamFromText');
+  const [detailed, setDetailed] = useState(!fromText);
+  return (
+    <Sheet title="팀 만들기" onClose={onClose}>
+      {detailed
+        ? <DetailedTeamForm groupId={groupId} onClose={onClose} />
+        : <DescribeTeamForm groupId={groupId} onClose={onClose} />}
+      {fromText && (
+        <button className="more-btn" style={{ alignSelf: 'center' }} onClick={() => setDetailed(!detailed)}>
+          {detailed ? '한 번에 적어서 만들기' : '직접 자세히 설정'}
+        </button>
+      )}
+    </Sheet>
+  );
+}
+
+function DescribeTeamForm({ groupId, onClose }: { groupId?: string; onClose: () => void }) {
+  const { session, openRoom } = useApp();
+  const groups = session.bots?.groups ?? [];
+  const [group, setGroup] = useState(groupId ?? '');
+  const [text, setText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const make = async () => {
+    const why = teamTextProblem(text);
+    if (why) { setProblem(why); return; }
+    setSaving(true); setProblem(null);
+    try {
+      const raw = await session.api.viewAction('bots', 'createTeamFromText', { text: text.trim(), ...(group ? { group } : {}) });
+      const built = decodeBuiltTeam(raw);
+      await session.refreshBasics();
+      if (!built) { session.say('팀을 만들었어요'); onClose(); return; }
+      session.justBuilt = built;
+      session.say(`${built.name}을(를) 만들었어요`);
+      onClose();
+      openRoom(built.channel);
+    } catch (e) { setProblem(errorText(e)); setSaving(false); }
+  };
+  return (
+    <>
+      {groups.length > 1 && (
+        <Panel tight>
+          <Row title="회사·영역" detail="안 골라도 돼요. 맥이 알맞은 곳을 고르거나 새로 만들어요." trailing={
+            <select className="field" style={{ width: 200 }} value={group} onChange={(e) => setGroup(e.target.value)} aria-label="회사·영역">
+              <option value="">맥이 알아서</option>
+              {groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+            </select>} />
+        </Panel>
+      )}
+      <Panel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <label className="bold" htmlFor="team-text">어떤 팀이 필요한지 자유롭게 적어 주세요</label>
+          <div className="footnote">하는 일, 사람·역할, 말투, 채널, 일정, 규칙… 아는 만큼 길게 적어도 돼요.</div>
+          <textarea id="team-text" className="field" rows={10} autoFocus value={text} maxLength={TEAM_TEXT_MAX} placeholder={TEAM_TEXT_PLACEHOLDER}
+            onChange={(e) => setText(e.target.value)} disabled={saving}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void make(); } }} />
+          <div className="footnote" style={{ display: 'flex' }}>
+            <span style={{ flex: 1 }}>{saving ? '맥이 팀을 짜는 중이에요. 몇 초 걸려요…' : '이름·하는 일·팀원(2~6명)은 맥이 정하고, 적은 글은 팀장이 일할 때 늘 봐요.'}</span>
+            <span>{text.length.toLocaleString('ko-KR')} / {TEAM_TEXT_MAX.toLocaleString('ko-KR')}</span>
+          </div>
+          {problem && <div className="footnote red" role="alert">{problem}</div>}
+        </div>
+      </Panel>
+      <Button kind="primary" full busy={saving} disabled={!text.trim()} onClick={() => void make()}>만들기</Button>
+    </>
+  );
+}
+
+/** Right after a team is made from a description: what the Mac built, and that all of it can be changed right here. */
+function BuiltSummary({ built, editable }: { built: BuiltTeam; editable: boolean }) {
+  return (
+    <div className="note-box" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div className="bold">적어 주신 대로 {built.name}을(를) 만들었어요</div>
+      {built.purpose && <div>{built.purpose}</div>}
+      {built.members.length > 0 && (
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {built.members.map((m) => <li key={m.id}><b>{m.name}</b>{m.role ? ` — ${m.role}` : ''}</li>)}
+        </ul>
+      )}
+      <div className="footnote">{built.briefKept ? '적어 주신 글은 팀장의 일하는 방식에 그대로 넣었어요.' : '적어 주신 글은 팀장에게 넣지 못했어요. 팀장의 일하는 방식에서 직접 적어 주세요.'}</div>
+      {editable && <div className="footnote">팀 이름·하는 일은 위의 '고치기', 팀원 이름·역할과 다른 팀으로 옮기기는 아래 팀원을 눌러 바로 고쳐요.</div>}
+    </div>
+  );
+}
+
+/** The detailed form: group, name, purpose, dev switch, then people and tiers by hand (or AI decides). */
+function DetailedTeamForm({ groupId, onClose }: { groupId?: string; onClose: () => void }) {
   const { session, openRoom } = useApp();
   const groups = session.bots?.groups ?? [];
   const [group, setGroup] = useState(groupId ?? groups[0]?.id ?? 'new');
@@ -340,7 +442,7 @@ export function AddTeamSheet({ groupId, onClose }: { groupId?: string; onClose: 
   };
 
   return (
-    <Sheet title="팀 추가" onClose={onClose}>
+    <>
       <Panel tight>
         <Row title="회사·영역" trailing={
           <select className="field" style={{ width: 200 }} value={group} onChange={(e) => setGroup(e.target.value)}>
@@ -372,7 +474,7 @@ export function AddTeamSheet({ groupId, onClose }: { groupId?: string; onClose: 
         <div className="note-box">하는 일·일의 양·위험도와 최근 사용량·예산을 보고 AI가 인원과 등급을 정해요. 정한 이유는 팀 설정 맨 위에 보여요. 나중에 바꿀 수 있어요.</div>
       )}
       <Button kind="primary" full busy={saving} disabled={!ready} onClick={() => void save()}>팀 만들기</Button>
-    </Sheet>
+    </>
   );
 }
 
