@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import { cardLine, cleanText, previewText } from '../core/chatText';
+import { cardTitle, cleanText, previewText } from '../core/chatText';
 import { buildFeed, type Entry, type Folded, type Row } from '../core/roomFeed';
 import { useApp } from '../app/context';
 import { hasFeature } from '../core/api';
-import { closedLabel } from '../core/cards';
-import type { Attachment, CardEvent, Choice, DelegationEvent, MessageEvent, NoticeEvent } from '../core/events';
+import { closedLabel, opensInApp, optionsFor } from '../core/cards';
+import { answeredOption, cardEcho, liveChoicesSeq } from '../core/chatChoices';
+import type { Attachment, CardEvent, CardOption, Choice, DelegationEvent, MessageEvent, NoticeEvent } from '../core/events';
 import { clock, fileSize, subject } from '../core/format';
 import { allBots, botFor, groupForMeeting, teamFor, type BotsView } from '../core/views';
 import { handsOver } from '../core/browserLive';
@@ -79,7 +80,9 @@ export function ChatRoom({ room, compactWidth, tray }: { room: string; compactWi
   const rows = useMemo(() => buildFeed(items, room, { lead, assistant: session.assistantName, cardDate: (id) => session.timeline.card(id)?.at }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, items.length, items[items.length - 1]?.seq, room, lead?.id, session.assistantName]);
-  const recent = new Set(items.slice(-2).map((i) => i.seq));
+  // Only the latest buttons work, until the owner answers; older ones stay, dimmed.
+  const live = liveChoicesSeq(items);
+  const choosing = session.choosing.filter((c) => c.room === room);
   const [menu, setMenu] = useState<{ x: number; y: number; m: MessageEvent } | null>(null);
   useEffect(() => {
     if (!menu) return;
@@ -102,9 +105,12 @@ export function ChatRoom({ room, compactWidth, tray }: { room: string; compactWi
         style={dragging ? { outline: '2px dashed var(--accent)', outlineOffset: -8 } : undefined}>
         <div className={`chat${compactWidth ? ' narrow' : ''}`}>
           {items.length === 0 && pending.length === 0 && <RoomIntro room={room} />}
-          {rows.map((row) => <RowView key={row.key} row={row} room={room} recent={recent} faces={style !== 'main'} latest={lastBot}
+          {rows.map((row) => <RowView key={row.key} row={row} room={room} live={live} faces={style !== 'main'} latest={lastBot}
             open={openFolds.has(row.key)} toggle={() => setOpenFolds((s) => { const n = new Set(s); if (n.has(row.key)) n.delete(row.key); else n.add(row.key); return n; })}
             onMenu={(x, y, m) => setMenu({ x, y, m })} />)}
+          {choosing.map((c) => (
+            <div key={c.key} className="msg owner"><div className="bubble owner pending selectable">{c.label}</div></div>
+          ))}
           {pending.map((p) => (
             <div key={p.id} className="msg owner">
               <div className={`bubble owner pending selectable${p.failed ? ' failed' : ''}`}>{p.text}</div>
@@ -273,20 +279,20 @@ function MicButton({ phase, elapsed, level, onClick }: { phase: 'idle' | 'record
 
 type MenuOpener = (x: number, y: number, m: MessageEvent) => void;
 
-function RowView({ row, room, recent, faces, latest, open, toggle, onMenu }: { row: Row; room: string; recent: Set<number>; faces: boolean; latest?: number; open: boolean; toggle: () => void; onMenu: MenuOpener }) {
+function RowView({ row, room, live, faces, latest, open, toggle, onMenu }: { row: Row; room: string; live: number | null; faces: boolean; latest?: number; open: boolean; toggle: () => void; onMenu: MenuOpener }) {
   const { session } = useApp();
   switch (row.kind) {
     case 'day': return <div className="day-line" role="separator"><span>{row.label}</span></div>;
-    case 'entry': return <EntryView e={row.entry} room={room} faces={faces} showChoices={recent.has(row.entry.seq)} latest={latest} onMenu={onMenu} />;
+    case 'entry': return <EntryView e={row.entry} room={room} faces={faces} live={live === row.entry.seq} latest={latest} onMenu={onMenu} />;
     case 'folded': return <FoldedRun fold={row.fold} room={room} open={open} toggle={toggle} onMenu={onMenu} />;
     case 'system': {
       const item = row.item;
-      if (item.kind === 'notice') return <NoticeLine n={item.event} room={room} showChoices={recent.has(item.seq)} />;
+      if (item.kind === 'notice') return <NoticeLine n={item.event} room={room} live={live === item.seq} />;
       if (item.kind === 'delegation') return <DelegationLine d={item.event} />;
       if (item.kind === 'card') {
         const card = session.timeline.card(item.cardId);
         if (!card || session.timeline.isDuplicate(item.cardId)) return null;
-        return <CardLine card={card} />;
+        return <CardTalk card={card} room={room} faces={faces} />;
       }
       return null;
     }
@@ -306,7 +312,7 @@ function LongText({ text, lines = 10 }: { text: string; lines?: number }) {
 }
 
 /** One line in a room: face and name on the first of a run, who it was said to, the bubble, replies folded below. */
-function EntryView({ e, room, faces, showChoices, latest, onMenu, compact }: { e: Entry; room: string; faces: boolean; showChoices: boolean; latest?: number; onMenu: MenuOpener; compact?: boolean }) {
+function EntryView({ e, room, faces, live, latest, onMenu, compact }: { e: Entry; room: string; faces: boolean; live: boolean; latest?: number; onMenu: MenuOpener; compact?: boolean }) {
   const { session } = useApp();
   const [repliesOpen, setRepliesOpen] = useState(false);
   if (e.speaker.isOwner) {
@@ -319,6 +325,9 @@ function EntryView({ e, room, faces, showChoices, latest, onMenu, compact }: { e
   }
   const m = e.item.kind === 'message' ? e.item.event : null;
   const n = e.item.kind === 'notice' ? e.item.event : null;
+  // Buttons sit inside the bubble they belong to; without text they stand on their own.
+  const choices = m?.choices?.length ? m.choices : n?.choices?.length ? n.choices : null;
+  const buttons = choices ? <Choices choices={choices} room={room} seq={e.seq} live={live} /> : null;
   const bot = allBots(session.bots).find((b) => b.name === e.speaker.name || b.id === e.speaker.id);
   const size = compact ? 26 : 34;
   return (
@@ -337,21 +346,22 @@ function EntryView({ e, room, faces, showChoices, latest, onMenu, compact }: { e
         {n && workNoticeLabel(n.kind) && !(e.showHeader && (faces || e.to)) && <span className="chip work-chip">{workNoticeLabel(n.kind)}</span>}
         {e.text && (
           <div className={`bubble assistant${e.isStatus ? ' status' : ''}`} title={clock(e.at)}>
-            <LongText text={e.text} lines={e.isStatus ? 4 : 10} />
+            <LongText text={e.text} lines={e.isStatus ? 4 : choices ? 16 : 10} />
             {e.repeats > 1 && <span className="footnote" style={{ marginLeft: 6 }}>×{e.repeats}</span>}
+            {buttons && <div className="bubble-choices">{buttons}</div>}
           </div>
         )}
+        {!e.text && buttons}
         {(() => {
           const counts = session.timeline.reactions.get(e.seq);
           return counts && counts.size ? <div className="reactions">{[...counts].sort((a, b) => b[1] - a[1]).map(([emoji, k]) => <span key={emoji} className="reaction-chip">{emoji}{k > 1 ? ` ${k}` : ''}</span>)}</div> : null;
         })()}
-        {m && <MessageExtras m={m} room={room} showChoices={showChoices} />}
+        {m && <MessageExtras m={m} />}
         {n && (n.attachments?.length || n.imageUrl) ? <Pictures attachments={n.attachments} imageUrl={n.imageUrl} size={180} /> : null}
-        {n && showChoices && n.choices && <Choices choices={n.choices} room={room} seq={n.seq} />}
         {n && workNoticeLabel(n.kind) && <HandoverButton m={n} />}
         {e.replies.length > 0 && (
           <div className="replies">
-            {repliesOpen && e.replies.map((r) => <div key={r.seq} className="reply"><EntryView e={r} room={room} faces showChoices={false} onMenu={onMenu} compact /></div>)}
+            {repliesOpen && e.replies.map((r) => <div key={r.seq} className="reply"><EntryView e={r} room={room} faces live={false} onMenu={onMenu} compact /></div>)}
             <button className="reply-toggle" onClick={() => setRepliesOpen((o) => !o)} aria-expanded={repliesOpen}>
               {repliesOpen ? '답글 접기' : <><b>답글 {e.replies.length}개</b><span className="secondary"> {e.replies[e.replies.length - 1].speaker.name}: {previewText(e.replies[e.replies.length - 1].text, 50)}</span></>}
             </button>
@@ -373,19 +383,18 @@ function FoldedRun({ fold, room, open, toggle, onMenu }: { fold: Folded; room: s
         <span className="bold" style={{ flex: 1, textAlign: 'left' }}>{fold.title}</span>
         <span className="accent">{open ? '접기' : '펼치기'}</span>
       </button>
-      {open && fold.entries.map((e) => <EntryView key={e.seq} e={{ ...e, showHeader: true }} room={room} faces showChoices={false} onMenu={onMenu} />)}
+      {open && fold.entries.map((e) => <EntryView key={e.seq} e={{ ...e, showHeader: true }} room={room} faces live={false} onMenu={onMenu} />)}
     </div>
   );
 }
 
-function MessageExtras({ m, room, showChoices }: { m: MessageEvent; room: string; showChoices: boolean }) {
+function MessageExtras({ m }: { m: MessageEvent }) {
   return (
     <>
       {(m.attachments?.length || m.imageUrl) ? <Pictures attachments={m.attachments} imageUrl={m.imageUrl} /> : null}
       {m.links?.filter((l) => l.url.startsWith('https://')).map((l) => (
         <a key={l.url} className="link" style={{ fontSize: 13 }} title={l.url} onClick={() => void openLink(l.url)}>{l.label}</a>
       ))}
-      {showChoices && m.choices && <Choices choices={m.choices} room={room} seq={m.seq} />}
       <HandoverButton m={m} />
     </>
   );
@@ -510,25 +519,26 @@ function Picture({ src, type, name, size }: { src: string; type?: string; name: 
   );
 }
 
-/** Choices under a line: once one is picked, all of them are done (a double click sends once). */
-function Choices({ choices, room, seq }: { choices: Choice[]; room: string; seq: number }) {
+/** Choices in a line: once one is picked, or once the conversation moved on, all of them are dimmed (a double click sends once). */
+function Choices({ choices, room, seq, live }: { choices: Choice[]; room: string; seq: number; live: boolean }) {
   const { session } = useApp();
   const picked = choices.find((c) => session.chosen.has(`${seq}:${c.id}`));
+  const off = !!picked || !live;
   return (
-    <div className="choices">
+    <div className={`choices${off ? ' done' : ''}`} title={off && !picked ? '지난 질문이에요. 다시 하려면 말로 해 주세요.' : undefined}>
       {choices.map((c) => (
-        <button key={c.id} className={`choice${picked?.id === c.id ? ' on' : ''}`} disabled={!!picked} aria-pressed={picked?.id === c.id}
+        <button key={c.id} className={`choice${picked?.id === c.id ? ' on' : ''}`} disabled={off} aria-pressed={picked?.id === c.id}
           onClick={() => void session.choose(c, room, seq)}>{c.label}</button>
       ))}
     </div>
   );
 }
 
-function NoticeLine({ n, room, showChoices }: { n: NoticeEvent; room: string; showChoices: boolean }) {
+function NoticeLine({ n, room, live }: { n: NoticeEvent; room: string; live: boolean }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
       <div className="notice"><LongText text={cleanText(n.text)} lines={6} /></div>
-      {showChoices && n.choices && <Choices choices={n.choices} room={room} seq={n.seq} />}
+      {n.choices?.length ? <Choices choices={n.choices} room={room} seq={n.seq} live={live} /> : null}
       <HandoverButton m={n} />
     </div>
   );
@@ -550,18 +560,65 @@ function DelegationLine({ d }: { d: DelegationEvent }) {
 }
 
 /** A 결재 in the chat is one line; answering happens in the 결재 pane so the conversation stays readable. */
-function CardLine({ card }: { card: CardEvent }) {
+/**
+ * A question card in the chat: the assistant (or the bot that asks) says it in a bubble with the answer buttons
+ * inside, and the answer shows as the owner's line under it. Answered or closed: the buttons stay, dimmed, with the
+ * one picked marked. Writing a different answer or the details is on the 결재 screen (자세히 ›).
+ */
+function CardTalk({ card, room, faces }: { card: CardEvent; room: string; faces: boolean }) {
   const { session, go } = useApp();
+  const [busy, setBusy] = useState<string | null>(null);
   const open = session.timeline.isOpen(card.cardId);
   const closure = session.timeline.closure(card.cardId);
+  const options = optionsFor(card);
+  const picked = answeredOption(card, closure);
+  const echo = cardEcho(card, closure);
+  const who = card.author?.name ?? (room ? session.roomTitle(room) : session.assistantName);
+  const context = card.note && cleanText(card.note) && cleanText(card.note) !== cardTitle(card.summary, card.note) ? cleanText(card.note) : null;
+  const pick = async (o: CardOption) => {
+    if (busy || !open) return;
+    const screen = opensInApp(card, o);
+    if (screen) { go({ section: screen }); return; }
+    setBusy(o.id);
+    await session.answerOption(card, o, false);
+    setBusy(null);
+  };
+  const details = () => { session.selectedCard = card.cardId; go({ section: 'approvals' }); };
   return (
-    <button className="line-card" style={{ opacity: open ? 1 : 0.7, cursor: open ? 'pointer' : 'default' }} onClick={() => { if (open) { session.selectedCard = card.cardId; go({ section: 'approvals' }); } }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="t" style={{ color: open ? 'var(--accent)' : 'var(--text2)' }}>{open ? '결재 요청' : `결재 끝 · ${closedLabel(closure, !closure)}`}</div>
-        {/* The context is a natural sentence or two (who, when, what, why): always shown whole, never cut. */}
-        <div className="x full">{cardLine(card.summary, card.note)}</div>
+    <>
+      <div className={`convo bot-msg${faces ? '' : ' no-face'}`}>
+        {faces && <div className="convo-face" style={{ width: 34 }}><BotAvatar name={who} size={34} avatar={card.author?.avatar} /></div>}
+        <div className="convo-body">
+          <div className="convo-head">
+            {faces && <span className="bold">{who}</span>}
+            <span className={`chip${open ? ' accent' : ''}`}>{open ? '결재 요청' : '결재'}</span>
+            <span className="footnote">{clock(card.at)}</span>
+          </div>
+          <div className="bubble assistant card-talk">
+            {context && <div className="selectable" style={{ whiteSpace: 'pre-wrap' }}>{context}</div>}
+            <div className="selectable bold">{cardTitle(card.summary, card.note)}</div>
+            {(card.attachments?.length || card.imageUrl) ? <Pictures attachments={card.attachments} imageUrl={card.imageUrl} size={160} /> : null}
+            <div className="bubble-choices">
+              <div className={`choices${open ? '' : ' done'}`}>
+                {options.map((o) => (
+                  <button key={o.id} className={`choice${o.tone === 'danger' ? ' danger' : ''}${picked === o.id ? ' on' : ''}`} disabled={!open || busy !== null}
+                    aria-pressed={picked === o.id} title={o.detail} onClick={() => void pick(o)}>
+                    {o.label}{busy === o.id && <span className="spinner" style={{ marginLeft: 6 }} />}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="footnote" style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              {open ? <button className="more-btn" onClick={details}>자세히·직접 쓰기 ›</button> : <span>{closedLabel(closure, !closure)}</span>}
+            </div>
+          </div>
+        </div>
       </div>
-      {open && <Icon.chevron />}
-    </button>
+      {echo && (
+        <div className="msg owner">
+          <div className="bubble owner selectable" title={closure ? clock(closure.at) : undefined}>{echo}</div>
+        </div>
+      )}
+    </>
   );
 }

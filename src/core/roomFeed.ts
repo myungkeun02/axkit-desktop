@@ -1,3 +1,4 @@
+import { noticeIsBubble } from './chatChoices';
 import { cleanText, parseBotTalk, type BotTalk } from './chatText';
 import type { Author } from './events';
 import { dayLine } from './format';
@@ -87,6 +88,8 @@ export function buildFeed(items: readonly Item[], room: string, o: FeedOptions):
       else if (talk) units.push({ kind: 'entry', entry: talkEntry(item, n.at, talk) });
       else if (n.author) units.push({ kind: 'entry', entry: entry(item, n.at, botSpeaker(n.author), n.text) });
       else if (room) units.push({ kind: 'entry', entry: entry(item, n.at, roomVoice, n.text, { isStatus: true }) });
+      // The assistant asking something (buttons) or saying more than a line: its own bubble, like any answer.
+      else if (noticeIsBubble(n)) units.push({ kind: 'entry', entry: entry(item, n.at, { id: 'assistant', name: o.assistant }, n.text) });
       else units.push({ kind: 'system', item });
     } else {
       units.push({ kind: 'system', item });

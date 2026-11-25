@@ -625,9 +625,14 @@ button.wp-item:hover { background: var(--accent-soft); }
 .wp-dot.bad { background: var(--red); }
 .wp-meta, .wp-where { margin-left: 16px; }
 .wp-where { color: var(--accent); }
-.work-rail { flex: none; width: 40px; border: 0; border-left: 0.5px solid var(--sep); background: var(--page); color: var(--text2); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 0; cursor: pointer; }
-.work-rail:hover { color: var(--accent); }
+.work-rail { flex: none; width: 40px; border-left: 0.5px solid var(--sep); background: var(--page); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; }
+.work-rail-btn { border: 0; background: none; color: var(--text2); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; width: 100%; cursor: pointer; font: inherit; }
+.work-rail-btn:hover { color: var(--accent); }
 .work-rail svg { width: 18px; height: 18px; }
+.side-tabs { display: inline-flex; background: var(--sep); border-radius: 8px; padding: 2px; gap: 2px; }
+.side-tabs button { border: 0; background: none; font: inherit; font-size: 0.8125rem; font-weight: 600; color: var(--text2); padding: 4px 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.side-tabs button.on { background: var(--card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+.side-approvals { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 .work-rail-label { writing-mode: vertical-rl; font-size: 0.75rem; letter-spacing: 1px; }
 
 /* §31 @ 봇 고르기 */
@@ -638,3 +643,13 @@ button.wp-item:hover { background: var(--accent-soft); }
 
 /* §32 새 버전 */
 .banner.update { display: flex; align-items: center; gap: 10px; background: var(--accent-soft); color: var(--text); }
+
+/* Buttons inside the bubble they belong to; dimmed once picked or once the conversation moved on. */
+.bubble-choices { margin-top: 10px; }
+.bubble.assistant .choice { background: var(--card); box-shadow: inset 0 0 0 0.5px var(--sep); }
+.bubble.assistant .choice:hover:not(:disabled) { background: var(--accent-soft); }
+.choice.danger { color: var(--red); }
+.choices.done .choice:not(.on) { opacity: 0.45; }
+.choices.done .choice.on { opacity: 1; background: var(--accent); color: #fff; box-shadow: none; }
+.chip.accent { background: var(--accent-soft); color: var(--accent); }
+.card-talk { display: flex; flex-direction: column; gap: 6px; }

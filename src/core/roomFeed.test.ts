@@ -89,3 +89,13 @@ describe('koreanSearch', () => {
     expect(snippet('# 제목\n- **토스 본인확인**: 아직', '본인확인')).toBe('토스 본인확인: 아직');
   });
 });
+
+describe('main-room notices that ask', () => {
+  const main = (seq: number, text: string, choices?: { id: string; label: string }[]): Item =>
+    ({ kind: 'notice', seq, event: { type: 'notice', seq, at: '2026-11-20T01:00:00Z', text, choices } as NoticeEvent });
+  it('makes a notice with buttons the assistant talking, a one-liner stays a grey line', () => {
+    const rows = buildFeed([main(1, '답을 기다리는 메일이 1통 있어요.\n1) 김민수님 — 견적', [{ id: 'draft:1', label: '1번 김민수님께 답장 쓰기' }]), main(2, '연결됐어요.')], '', { lead: null, assistant: '비서', now });
+    expect(rows.filter((r) => r.kind !== 'day').map((r) => r.kind)).toEqual(['entry', 'system']);
+    expect(entries(rows)[0].speaker.name).toBe('비서');
+  });
+});

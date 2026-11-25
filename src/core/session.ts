@@ -519,19 +519,24 @@ export class Session {
   }
 
   /** A choice under a line: sent once (the same clientId if it is ever sent again), then the buttons are done. */
+  /** A picked button shows at once as the owner's line (the Mac records the same label as their message). */
+  choosing: { key: string; room: string; label: string }[] = [];
+
   async choose(choice: Choice, room: string, seq?: number) {
     const key = `${seq ?? 'x'}:${choice.id}`;
     if (this.chosen.has(key)) return;
     this.chosen.add(key);
+    this.choosing = [...this.choosing, { key, room, label: choice.label }];
     this.changed();
     try {
       await this.api.sendMessage({ choice: choice.id, channel: room, ...(seq !== undefined ? { clientId: choiceClientId(seq, choice.id) } : {}) });
       await this.catchUp();
     } catch (e) {
       this.chosen.delete(key);
-      this.changed();
       this.say(errorText(e));
     }
+    this.choosing = this.choosing.filter((c) => c.key !== key);
+    this.changed();
   }
 
   // MARK: cards
