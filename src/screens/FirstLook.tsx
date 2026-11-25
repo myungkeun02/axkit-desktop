@@ -17,7 +17,7 @@ export function FirstLookScreen() {
   const [now, setNow] = useState(Date.now());
 
   const load = async () => {
-    try { setLook(decodeFirstLook(await session.api.view('first-look'))); setLoadProblem(null); setNow(Date.now()); }
+    try { const l = decodeFirstLook(await session.api.view('first-look')); setLook(l); session.noteFirstLook(l?.status ?? null); setLoadProblem(null); setNow(Date.now()); }
     catch (e) { setLoadProblem(errorText(e)); }
   };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps

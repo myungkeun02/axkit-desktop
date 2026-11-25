@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CardEvent } from './events';
-import { approvalsSummary, mondayOf, monthChange, monthsBack, OTHER, spendingByMonth, teamWork, usageOverTime } from './stats';
+import { approvalsSummary, mondayOf, monthChange, monthsBack, OTHER, spendBasis, spendingByMonth, teamWork, usageOverTime } from './stats';
 import { Timeline } from './timeline';
 import type { BotsView, CalendarView, SpendingView, UsageView } from './views';
 
@@ -98,5 +98,34 @@ describe('approvals', () => {
     const s = approvalsSummary(null, t, '2026-11-19', { rules: [{ id: 'r', label: 'x', since: '2026-11-17T00:00:00Z', uses: 4 }, { id: 'o', label: 'y', since: '2026-10-01T00:00:00Z', uses: 90 }] });
     expect(s.fromHistory).toBe(false);
     expect(s.thisWeek).toEqual({ week: '2026-11-16', asked: 3, approved: 1, denied: 0, written: 1, auto: 4 });
+  });
+});
+
+describe('spendBasis (이번 달 지출 근거)', () => {
+  const view = (over: Partial<SpendingView> = {}): SpendingView => ({
+    month: '2026-11', currency: 'KRW', total: 200_000, count: 3,
+    byCategory: [{ category: 'shopping', label: '쇼핑', amount: 120_000, count: 1 }, { category: 'food', label: '식비', amount: 80_000, count: 2 }],
+    entries: [
+      { id: '1', date: '2026-11-20', merchant: '쿠팡', amount: 120_000, source: 'sms' },
+      { id: '2', date: '2026-11-21', merchant: '김밥집', amount: 50_000, source: 'sms' },
+      { id: '3', date: '2026-11-22', merchant: '카페', amount: 30_000, source: 'mail' },
+    ],
+    ...over,
+  });
+  it('says what was counted, the top category and the biggest spend', () => {
+    expect(spendBasis(view())).toEqual({
+      counted: '카드 알림·영수증 3건에서 셌어요 (카드 문자 2 · 메일 영수증 1)',
+      top: '많이 쓴 곳: 쇼핑 60%',
+      biggest: '가장 큰 지출: 쿠팡 12만원 (11/20)',
+    });
+  });
+  it('falls back to recent when there are no entries', () => {
+    const b = spendBasis(view({ entries: undefined, recent: [{ at: '2026-11-03T03:00:00Z', merchant: '마트', amount: 45_000 }] }));
+    expect(b?.counted).toBe('카드 알림·영수증 3건에서 셌어요');
+    expect(b?.biggest).toBe('가장 큰 지출: 마트 4만 5,000원 (11/3)');
+  });
+  it('is null when nothing was counted', () => {
+    expect(spendBasis(view({ count: 0, total: 0, byCategory: [], entries: [] }))).toBeNull();
+    expect(spendBasis(null)).toBeNull();
   });
 });

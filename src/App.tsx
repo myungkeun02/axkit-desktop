@@ -44,7 +44,11 @@ export function App({ session }: { session: Session }) {
 }
 
 /** Everything the sidebar can open, for the sidebar itself and the ⌘K palette. */
-interface Dest { key: string; label: string; group: string; icon?: () => ReactNode; open: () => void; active: boolean; badge?: number; extra?: ReactNode; hint?: string }
+interface Dest {
+  key: string; label: string; group: string; icon?: () => ReactNode; open: () => void; active: boolean; badge?: number; extra?: ReactNode; hint?: string;
+  /** Rarely used: not in the sidebar (unless open now), still in ⌘K and under 설정 및 연결 › 더 보기. */
+  rare?: boolean;
+}
 
 function useDestinations(): Dest[] {
   const { session, nav, go, openRoom } = useApp();
@@ -58,9 +62,10 @@ function useDestinations(): Dest[] {
     ...sec('home', session.assistantName, '비서', Icon.chat, true, { hint: '⌘1', badge: session.timeline.unreadCount('') || undefined }),
     ...sec('approvals', '결재', '비서', Icon.seal, true, { hint: '⌘2', badge: open || undefined }),
     ...sec('dashboard', '대시보드', '비서', Icon.chart, true, { hint: '⌘3' }),
-    // §24: above the companies' rooms, while there is a proposal (built or dropped ones stay to look at).
-    ...sec('team-plan', '팀 구조 제안', '비서', Icon.people, session.teamPlan !== null, { hint: session.teamPlan === 'proposed' ? '새 제안' : undefined }),
-    ...sec('first-look', '처음 알아보기', '비서', Icon.sparkle, hasFeature(caps, 'first-look') && has('first-look')),
+    // §24/§37: only while a proposal waits (once built or dropped, teams are changed on their own room's 팀 설정).
+    ...sec('team-plan', '팀 구조 제안', '비서', Icon.people, session.teamPlan === 'proposed', { hint: '새 제안' }),
+    // §27: until the first look is done; after that it is under 설정 및 연결 (처음 알아보기 다시 하기).
+    ...sec('first-look', '처음 알아보기', '비서', Icon.sparkle, hasFeature(caps, 'first-look') && has('first-look'), { rare: session.firstLook === 'done' }),
     ...sec('people', '사람', '비서', Icon.person, has('people')),
     ...sec('work', '하고 있는 일', '비서', Icon.checklist, has('work'), { hint: session.work?.active.length ? `${session.work.active.length}개 하는 중` : undefined }),
   ];
@@ -107,19 +112,19 @@ function useDestinations(): Dest[] {
     ...sec('calendar', '캘린더', '정리', Icon.calendar, true, { hint: '⌘5' }),
     ...sec('recordings', '녹음과 회의록', '정리', Icon.wave, hasFeature(caps, 'recordings') || has('recordings')),
     ...sec('autonomy', '알아서 하는 일', '비서가 챙기는 것', Icon.wand, has('autonomy')),
-    ...sec('browser-live', '브라우저 화면 넘겨받기', '비서가 챙기는 것', Icon.globe, hasFeature(caps, 'browser-live') && has('browser-live')),
+    ...sec('browser-live', '브라우저 화면 넘겨받기', '비서가 챙기는 것', Icon.globe, hasFeature(caps, 'browser-live') && has('browser-live'), { rare: true }),
     ...sec('routines', '루틴', '비서가 챙기는 것', Icon.clock, hasFeature(caps, 'routines') || has('routines')),
     ...sec('jobs', '반복 작업', '비서가 챙기는 것', Icon.repeat, has('jobs')),
     ...sec('spending', '지출', '비서가 챙기는 것', Icon.won, has('spending')),
     ...sec('usage', '사용량', 'AI', Icon.chart, has('usage')),
     ...sec('providers', 'AI 연결', 'AI', Icon.bolt, has('providers')),
-    ...sec('modeltiers', '등급과 용도', 'AI', Icon.tiers, has('modeltiers')),
-    ...sec('hardware', '맥 상태', '맥', Icon.cpu, has('hardware')),
-    ...sec('health', '상태 점검', '맥', Icon.check2, has('health')),
+    ...sec('modeltiers', '등급과 용도', 'AI', Icon.tiers, has('modeltiers'), { rare: true }),
+    ...sec('hardware', '맥 상태', '맥', Icon.cpu, has('hardware'), { rare: true }),
+    ...sec('health', '상태 점검', '맥', Icon.check2, has('health'), { rare: true }),
     ...sec('settings', '설정 및 연결', '맥', Icon.mac),
-    ...sec('projects', '프로젝트 가져오기', '맥', Icon.box, hasFeature(caps, 'projects') && has('projects')),
-    ...sec('phone-apps', '휴대폰 앱 설치', '맥', Icon.phone),
-    ...sec('help', '도움말', '맥', Icon.info),
+    ...sec('projects', '프로젝트 가져오기', '맥', Icon.box, hasFeature(caps, 'projects') && has('projects'), { rare: true }),
+    ...sec('phone-apps', '휴대폰 앱 설치', '맥', Icon.phone, true, { rare: true }),
+    ...sec('help', '도움말', '맥', Icon.info, true, { rare: true }),
     ...caps.views.filter((v) => v.ui === 'blocks').flatMap((v) => sec(`blocks:${v.name}`, v.title ?? v.name, '새 기능', iconFor(v.icon))),
   );
   return out;
@@ -171,7 +176,7 @@ function Shell() {
         </div>
         <nav className="sidebar-scroll" aria-label="메뉴">
           {sections.map((g) => {
-            const items = dests.filter((d) => d.group === g);
+            const items = dests.filter((d) => d.group === g && (!d.rare || d.active));
             const company = g.startsWith('company:') ? groups.find((c) => `company:${c.id}` === g) : undefined;
             if (!items.length && !company) return null;
             return (

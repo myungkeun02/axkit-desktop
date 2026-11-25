@@ -8,6 +8,7 @@ import { Timeline } from './timeline';
 import { channelsOf, type BotsView, type Channel } from './views';
 import { decodeWork, type WorkView } from './work';
 import { decodePlan, type PlanStatus } from './teamPlan';
+import { decodeFirstLook, type LookStatus } from './firstLook';
 import { decodeDesktopBuild, decodeReleaseBuild, pickUpdate, type DesktopBuild } from './appUpdate';
 
 // Everything the screens share: connection, the live stream, catch-up, the timeline and the outbox.
@@ -91,6 +92,8 @@ export class Session {
   bots: BotsView | null = null;
   /** §24: the team-structure proposal's status, or null when the server has none (or no `team-plan`). */
   teamPlan: PlanStatus | null = null;
+  /** §27 처음 알아보기's status (null = unknown or no such view): the sidebar drops the entry once it is `done`. */
+  firstLook: LookStatus | null = null;
   /** Bumped when the team plan may have changed elsewhere (a chat revision, a card): open plan screens read it again. */
   planRev = 0;
   /** §28 `views/work`: what the assistant is doing in the background and what finished lately (null = no such view). */
@@ -258,6 +261,7 @@ export class Session {
     this.channels = [];
     this.work = null;
     this.teamPlan = null;
+    this.firstLook = null;
     this.activity.clear();
     this.chosen.clear();
     this.capabilities = { features: [], views: [] };
@@ -297,6 +301,7 @@ export class Session {
       this.stopped = status.stopped === true;
       if (hasView(this.capabilities, 'bots')) this.bots = await this.api.view<BotsView>('bots').catch(() => this.bots);
       await this.refreshTeamPlan(false);
+      await this.refreshFirstLook(false);
       await this.refreshWork(false);
       await this.refreshUpdate(false);
       if (hasView(this.capabilities, 'channels')) this.channels = await this.api.view<unknown>('channels').then(channelsOf).catch(() => this.channels);
@@ -305,6 +310,16 @@ export class Session {
     }
     this.changed();
     return fresh;
+  }
+
+  async refreshFirstLook(redraw = true) {
+    if (!hasFeature(this.capabilities, 'first-look') || !hasView(this.capabilities, 'first-look')) { this.firstLook = null; return; }
+    try { this.noteFirstLook(decodeFirstLook(await this.api.view('first-look'))?.status ?? null, redraw); } catch { /* keep what we had */ }
+  }
+
+  /** The first-look screen reads the view itself; it tells the sidebar what it saw. */
+  noteFirstLook(status: LookStatus | null, redraw = true) {
+    if (status !== this.firstLook) { this.firstLook = status; if (redraw) this.changed(); }
   }
 
   async refreshTeamPlan(redraw = true) {

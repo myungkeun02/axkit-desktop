@@ -1,4 +1,4 @@
-import { shiftMonth, ymd } from './format';
+import { shiftMonth, won, ymd } from './format';
 import type { Timeline } from './timeline';
 import type { AutonomyView, BotsView, CalendarView, SpendingView, UsageView } from './views';
 
@@ -167,4 +167,44 @@ export function approvalsSummary(history: ApprovalsHistory | null | undefined, t
   // Rules made this week whose uses all fall in it are the only auto count we can be sure of.
   for (const r of autonomy?.rules ?? []) if (r.since && mondayOf(kst(r.since)) === week) w.auto += r.uses ?? 0;
   return { weeks: [w], thisWeek: w, fromHistory: false };
+}
+
+// ---------- 이번 달 지출: what the number is made of ----------
+
+/** Where ledger entries come from (spending skill sources; `kakao` is the chat plugin's 알림톡). */
+const SOURCE_LABEL: Record<string, string> = {
+  sms: '카드 문자', app: '결제 앱 알림', chat: '카톡 알림톡', kakao: '카톡 알림톡', mail: '메일 영수증', manual: '직접 적은 것',
+};
+
+export const SPEND_EMPTY = '아직 센 지출이 없어요. 휴대폰의 카드 문자·결제 앱 알림과 메일 영수증이 비서 맥에 들어오면 여기서 자동으로 세요. '
+  + '휴대폰 앱을 비서 맥에 연결하고, 메일은 비서 맥에서 ax-kit connect google로 연결해 주세요. 비서에게 "점심 12,000원 썼어"처럼 말해도 들어가요.';
+
+export interface SpendBasis {
+  /** "카드 알림·영수증 12건에서 셌어요 (카드 문자 9 · 메일 영수증 3)" */
+  counted: string;
+  /** "많이 쓴 곳: 식비 45%" */
+  top?: string;
+  /** "가장 큰 지출: 쿠팡 12만원 (11/20)" */
+  biggest?: string;
+}
+
+const monthDay = (date: string) => { const m = /^\d{4}-(\d{2})-(\d{2})/.exec(date); return m ? `${Number(m[1])}/${Number(m[2])}` : ''; };
+
+/** The 이번 달 지출 tile's basis, from `views/spending`; null when nothing was counted (say SPEND_EMPTY then). */
+export function spendBasis(v: SpendingView | null | undefined): SpendBasis | null {
+  if (!v || !v.count) return null;
+  const bySource = new Map<string, number>();
+  for (const e of v.entries ?? []) {
+    const label = SOURCE_LABEL[e.source ?? ''] ?? '그 밖의 알림';
+    bySource.set(label, (bySource.get(label) ?? 0) + 1);
+  }
+  const sources = [...bySource.entries()].sort((a, b) => b[1] - a[1]).map(([l, n]) => `${l} ${n}`).join(' · ');
+  const counted = `카드 알림·영수증 ${v.count.toLocaleString('ko-KR')}건에서 셌어요${sources ? ` (${sources})` : ''}`;
+  const cat = [...(v.byCategory ?? [])].sort((a, b) => b.amount - a.amount)[0];
+  const top = cat && v.total > 0 ? `많이 쓴 곳: ${cat.label} ${Math.round((cat.amount / v.total) * 100)}%` : undefined;
+  const rows = (v.entries?.length ? v.entries : (v.recent ?? []).map((r) => ({ ...r, date: r.at?.slice(0, 10) ?? '' })))
+    .filter((e) => e.amount > 0);
+  const big = rows.reduce<(typeof rows)[number] | undefined>((a, e) => (!a || e.amount > a.amount ? e : a), undefined);
+  const biggest = big ? `가장 큰 지출: ${big.merchant} ${won(big.amount)}${monthDay(big.date) ? ` (${monthDay(big.date)})` : ''}` : undefined;
+  return { counted, ...(top ? { top } : {}), ...(biggest ? { biggest } : {}) };
 }

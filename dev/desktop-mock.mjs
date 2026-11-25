@@ -18,6 +18,7 @@ import * as firstLook from './mock/firstlook.mjs';
 import * as people from './mock/people.mjs';
 import * as drive from './mock/drive.mjs';
 import * as calendars from './mock/calendars.mjs';
+import * as botEdit from './mock/botedit.mjs';
 import * as dictation from './mock/dictation.mjs';
 import * as appUpdates from './mock/appupdates.mjs';
 
@@ -33,7 +34,7 @@ process.on('exit', () => child.kill());
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { child.kill(); process.exit(0); });
 
 /** Extensions, in order. Each may `handle` a request (return true when it answered) or `augment` a JSON reply. */
-const extensions = [routes, stats, instructions, browserLive, projects, teamPlan, work, firstLook, people, dictation, appUpdates, drive, calendars];
+const extensions = [routes, stats, instructions, browserLive, projects, teamPlan, work, firstLook, people, dictation, appUpdates, drive, calendars, botEdit];
 
 const send = (res, status, body) => {
   const data = JSON.stringify(body);
@@ -85,6 +86,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/dev/people') { people.devReset(url.searchParams); return send(res, 200, { ok: true }); }
     if (url.pathname === '/dev/dictation') { dictation.devReset(url.searchParams); return send(res, 200, { ok: true }); }
     if (url.pathname === '/m/dev/release.json') { const r = appUpdates.releaseJson(); return r ? send(res, 200, r) : send(res, 404, { ok: false }); }
+    if (url.pathname === '/dev/botedit') { botEdit.devReset(); return send(res, 200, { ok: true }); }
     if (url.pathname === '/dev/calendars') { calendars.devReset(url.searchParams); return send(res, 200, { ok: true }); }
     if (url.pathname === '/dev/work') { work.devReset(url.searchParams); return send(res, 200, { ok: true }); }
     if (url.pathname === '/dev/plan') { teamPlan.devReset(url.searchParams); return send(res, 200, { ok: true }); }

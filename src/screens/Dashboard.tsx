@@ -4,7 +4,7 @@ import { useApp } from '../app/context';
 import { hasView } from '../core/api';
 import { dollars, won, ymd } from '../core/format';
 import {
-  approvalsSummary, monthChange, monthsBack, mondayOf, spendingByMonth, teamWork, usageOverTime,
+  approvalsSummary, monthChange, monthsBack, mondayOf, SPEND_EMPTY, spendBasis, spendingByMonth, teamWork, usageOverTime,
   type ApprovalsHistory, type Series, type UsageBy, type UsageMeasure,
 } from '../core/stats';
 import type { AutonomyView, CalendarView, SpendingView, UsageView } from '../core/views';
@@ -91,18 +91,21 @@ export function Dashboard() {
 
 // ---------- tiles ----------
 
-function Tile({ k, v, s }: { k: string; v: ReactNode; s?: ReactNode }) {
-  return <div className="tile"><div className="k">{k}</div><div className="v">{v}</div>{s && <div className="s">{s}</div>}</div>;
+function Tile({ k, v, s, more, onClick }: { k: string; v: ReactNode; s?: ReactNode; more?: ReactNode; onClick?: () => void }) {
+  const body = <><div className="k">{k}</div><div className="v">{v}</div>{s && <div className="s">{s}</div>}{more}</>;
+  return onClick
+    ? <button type="button" className="tile clickable" onClick={onClick} title={`${k} 자세히 보기`}>{body}</button>
+    : <div className="tile">{body}</div>;
 }
 
 function Tiles({ today }: { today: string }) {
-  const { session } = useApp();
+  const { session, go } = useApp();
   const caps = session.capabilities;
   const month = today.slice(0, 7);
   const [spend] = useLoad(async () => {
     if (!hasView(caps, 'spending')) return null;
     const [cur, prev] = await Promise.all(monthsBack(month, 2).reverse().map((m) => session.api.view<SpendingView>('spending', { month: m })));
-    return monthChange(cur, prev);
+    return { ...monthChange(cur, prev), basis: spendBasis(cur) };
   }, [caps, month]);
   const [ai] = useLoad(() => (hasView(caps, 'usage') ? session.api.view<UsageView>('usage', { period: 'month' }) : Promise.resolve(null)), [caps]);
   const [appr] = useLoad(async () => {
@@ -123,8 +126,12 @@ function Tiles({ today }: { today: string }) {
   const val = <T,>(l: Loadable<T | null>, f: (v: T) => ReactNode) => (l.state === 'loaded' ? (l.value === null ? null : f(l.value)) : l.state === 'loading' ? <Spinner /> : '—');
   const tiles: ReactNode[] = [];
   if (hasView(caps, 'spending')) {
-    tiles.push(<Tile key="s" k="이번 달 지출" v={val(spend, (s) => won(s.total))}
-      s={spend.state === 'loaded' && spend.value?.previous ? `지난달 전체 ${won(spend.value.previous)}의 ${Math.round((spend.value.total / spend.value.previous) * 100)}%` : '지난달 기록 없음'} />);
+    const sv = spend.state === 'loaded' ? spend.value : null;
+    tiles.push(<Tile key="s" k="이번 달 지출" v={val(spend, (s) => won(s.total))} onClick={() => go({ section: 'spending' })}
+      s={sv?.previous ? `지난달 전체 ${won(sv.previous)}의 ${Math.round((sv.total / sv.previous) * 100)}%` : sv ? '지난달 기록 없음' : undefined}
+      more={sv && (sv.basis
+        ? <div className="basis">{[sv.basis.counted, sv.basis.top, sv.basis.biggest].filter(Boolean).map((l) => <div key={l}>{l}</div>)}</div>
+        : <div className="basis">{SPEND_EMPTY}</div>)} />);
   }
   if (hasView(caps, 'usage')) {
     tiles.push(<Tile key="a" k="AI 비용 이번 달" v={val(ai, (u) => dollars(u.totals.costUsd))}

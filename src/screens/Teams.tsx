@@ -6,6 +6,7 @@ import { botFor, groupForMeeting, RANK_LABEL, teamFor, teamMembers, TIERS, type 
 import { BotAvatar } from '../ui/BotAvatar';
 import { Button, CardHeader, List, Panel, Row, Segmented, Sheet, Switch } from '../ui/kit';
 import { Banners } from './Banners';
+import { canEdit, EDIT_MAX, editBotBody, moveTargets, renameTeamBody } from '../core/botEdit';
 import { ChatRoom, ordinalOf } from './Chat';
 
 /** A team, meeting or (older server) bot room: conversation in the middle, team settings on the right. */
@@ -70,6 +71,8 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
   const members = teamMembers(session.bots, team);
   const canSet = viewActions(session.capabilities, 'bots').includes('setTiers');
   const canInstruct = viewActions(session.capabilities, 'bots').includes('setInstructions') || members.some((m) => m.instructions !== undefined);
+  const edits = canEdit(viewActions(session.capabilities, 'bots'));
+  const canOpen = canInstruct || edits.editBot || edits.moveBot;
   const [open, setOpen] = useState<string | null>(null);
   const roles = (['lead', 'staff', 'reviewer'] as Rank[]).filter((r) => members.some((m) => m.rank === r));
   const tierOf = (r: Rank) => members.find((m) => m.rank === r)?.tier;
@@ -82,11 +85,7 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div style={{ flex: 1, fontWeight: 700, fontSize: 16 }}>{team.name}</div>
-        <button className="btn plain small" onClick={onClose}>닫기</button>
-      </div>
-      {team.purpose && <div className="secondary">{team.purpose}</div>}
+      <TeamName team={team} editable={edits.renameTeam} onClose={onClose} />
       {team.decidedBy === 'ai' && (
         <div className="note-box">AI가 정한 구성이에요{team.reason ? ` — ${team.reason}` : ''}</div>
       )}
@@ -100,10 +99,11 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
                 detail={[m.rank ? RANK_LABEL[m.rank] : null, m.statusText].filter(Boolean).join(' · ')}
                 trailing={<span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {m.tier && <span className="tier-badge">{m.tier}</span>}
-                  {canInstruct && <span className="footnote">{open === m.id ? '접기' : '일하는 방식'}</span>}
+                  {canOpen && <span className="footnote">{open === m.id ? '접기' : edits.editBot || edits.moveBot ? '고치기' : '일하는 방식'}</span>}
                 </span>}
-                onClick={canInstruct ? () => setOpen(open === m.id ? null : m.id) : undefined} />
-              {open === m.id && <Instructions bot={m} />}
+                onClick={canOpen ? () => setOpen(open === m.id ? null : m.id) : undefined} />
+              {open === m.id && (edits.editBot || edits.moveBot) && <MemberEdit key={m.id} bot={m} team={team} canRename={edits.editBot} canMove={edits.moveBot} onMoved={() => setOpen(null)} />}
+              {open === m.id && canInstruct && <Instructions bot={m} />}
             </div>
           ))}
         </List>
@@ -118,6 +118,119 @@ function TeamSettings({ team, onClose }: { team: Team; onClose: () => void }) {
           </List>
         </Panel>
       )}
+    </div>
+  );
+}
+
+/** The team's name and what it does; 고치기 edits both in place (§37 renameTeam, applied at once). */
+function TeamName({ team, editable, onClose }: { team: Team; editable: boolean; onClose: () => void }) {
+  const { session } = useApp();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(team.name);
+  const [purpose, setPurpose] = useState(team.purpose ?? '');
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const begin = () => { setName(team.name); setPurpose(team.purpose ?? ''); setProblem(null); setEditing(true); };
+  const save = async () => {
+    const r = renameTeamBody(team, name, purpose);
+    if ('problem' in r) { setProblem(r.problem); return; }
+    setSaving(true); setProblem(null);
+    try {
+      await session.api.viewAction('bots', 'renameTeam', r.body);
+      await session.refreshBasics();
+      session.say('팀 이름을 바꿨어요');
+      setEditing(false);
+    } catch (e) { setProblem(errorText(e)); }
+    setSaving(false);
+  };
+  if (!editing) {
+    return (
+      <>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ flex: 1, fontWeight: 700, fontSize: 16 }}>{team.name}</div>
+          {editable && <button className="btn plain small" onClick={begin}>고치기</button>}
+          <button className="btn plain small" onClick={onClose}>닫기</button>
+        </div>
+        {team.purpose && <div className="secondary">{team.purpose}</div>}
+      </>
+    );
+  }
+  return (
+    <Panel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <label className="footnote" htmlFor="team-name">팀 이름</label>
+        <input id="team-name" className="field" value={name} maxLength={EDIT_MAX.name} autoFocus onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) void save(); if (e.key === 'Escape') setEditing(false); }} />
+        <label className="footnote" htmlFor="team-purpose">하는 일</label>
+        <textarea id="team-purpose" className="field" rows={2} value={purpose} maxLength={EDIT_MAX.purpose} onChange={(e) => setPurpose(e.target.value)} />
+        {problem && <div className="footnote red" role="alert">{problem}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button kind="primary" small busy={saving} disabled={!name.trim()} onClick={() => void save()}>저장</Button>
+          <Button kind="secondary" small disabled={saving} onClick={() => setEditing(false)}>취소</Button>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/** A member's name and role, and moving them to another team (§37 editBot / moveBot, applied at once). */
+function MemberEdit({ bot, team, canRename, canMove, onMoved }: { bot: Bot; team: Team; canRename: boolean; canMove: boolean; onMoved: () => void }) {
+  const { session } = useApp();
+  const [name, setName] = useState(bot.name);
+  const [role, setRole] = useState(bot.role ?? '');
+  const targets = moveTargets(session.bots, bot, team);
+  const [to, setTo] = useState(targets[0]?.id ?? '');
+  const [saving, setSaving] = useState<'edit' | 'move' | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const changed = editBotBody(bot, name, role);
+  const save = async () => {
+    if (!changed) return;
+    if ('problem' in changed) { setProblem(changed.problem); return; }
+    setSaving('edit'); setProblem(null);
+    try {
+      await session.api.viewAction('bots', 'editBot', changed.body);
+      await session.refreshBasics();
+      session.say(`${name.trim()}을(를) 고쳤어요`);
+    } catch (e) { setProblem(errorText(e)); }
+    setSaving(null);
+  };
+  const move = async () => {
+    const target = targets.find((t) => t.id === to);
+    if (!target) return;
+    setSaving('move'); setProblem(null);
+    try {
+      await session.api.viewAction('bots', 'moveBot', { botId: bot.id, teamId: target.id });
+      await session.refreshBasics();
+      session.say(`${bot.name}을(를) ${target.label}(으)로 옮겼어요`);
+      onMoved();
+    } catch (e) { setProblem(errorText(e)); setSaving(null); }
+  };
+  return (
+    <div className="instructions">
+      {canRename && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 10px', alignItems: 'center' }}>
+            <label className="footnote" htmlFor={`bot-name-${bot.id}`}>이름</label>
+            <input id={`bot-name-${bot.id}`} className="field" value={name} maxLength={EDIT_MAX.name} onChange={(e) => setName(e.target.value)} />
+            <label className="footnote" htmlFor={`bot-role-${bot.id}`}>역할</label>
+            <input id={`bot-role-${bot.id}`} className="field" value={role} maxLength={EDIT_MAX.role} placeholder="예: 프론트엔드 개발" onChange={(e) => setRole(e.target.value)} />
+          </div>
+          <div><Button kind="primary" small busy={saving === 'edit'} disabled={!changed || saving !== null} onClick={() => void save()}>저장</Button></div>
+        </>
+      )}
+      {canMove && (bot.rank === 'lead'
+        ? <div className="footnote">팀장은 다른 팀으로 옮길 수 없어요. 팀원을 옮기거나 팀 이름을 바꿔 주세요.</div>
+        : targets.length === 0 ? <div className="footnote">옮길 다른 팀이 없어요.</div>
+        : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="footnote">다른 팀으로</span>
+            <select className="field" style={{ width: 'auto', flex: 1, minWidth: 140 }} value={to} onChange={(e) => setTo(e.target.value)} aria-label={`${bot.name}을(를) 옮길 팀`}>
+              {targets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+            <Button kind="secondary" small busy={saving === 'move'} disabled={!to || saving !== null} onClick={() => void move()}>옮기기</Button>
+          </div>
+        ))}
+      {problem && <div className="footnote red" role="alert">{problem}</div>}
     </div>
   );
 }

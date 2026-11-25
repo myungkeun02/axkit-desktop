@@ -53,8 +53,30 @@ function TextSizeSettings() {
   );
 }
 
-export function Settings() {
+/** 더 보기: screens taken off the sidebar because they are opened rarely (they stay in ⌘K too). */
+function MoreScreens() {
   const { session, go } = useApp();
+  const caps = session.capabilities;
+  const rows: { key: Parameters<typeof go>[0]['section']; icon: () => ReactNode; title: string; detail: string; show: boolean }[] = [
+    { key: 'first-look', icon: Icon.sparkle, title: session.firstLook === 'done' ? '처음 알아보기 다시 하기' : '처음 알아보기', detail: '맥의 파일을 읽고 회사·프로젝트·팀을 다시 제안받아요', show: hasFeature(caps, 'first-look') && hasView(caps, 'first-look') },
+    { key: 'projects', icon: Icon.box, title: '프로젝트 가져오기', detail: '처음 알아보기가 읽을 프로젝트를 회사별로 골라요', show: hasFeature(caps, 'projects') && hasView(caps, 'projects') },
+    { key: 'health', icon: Icon.check2, title: '상태 점검', detail: '비서 맥에 문제가 있는지, 고쳐 달라고 하기', show: hasView(caps, 'health') },
+    { key: 'hardware', icon: Icon.cpu, title: '맥 상태', detail: 'CPU·메모리·디스크·전원', show: hasView(caps, 'hardware') },
+    { key: 'modeltiers', icon: Icon.tiers, title: '등급과 용도', detail: '어떤 일에 어떤 AI 등급을 쓰는지', show: hasView(caps, 'modeltiers') },
+    { key: 'browser-live', icon: Icon.globe, title: '브라우저 화면 넘겨받기', detail: '비서가 로그인 같은 걸 부탁할 때 여는 화면', show: hasFeature(caps, 'browser-live') && hasView(caps, 'browser-live') },
+    { key: 'phone-apps', icon: Icon.phone, title: '휴대폰 앱 설치', detail: '아이폰·안드로이드 앱 설치 QR', show: true },
+    { key: 'help', icon: Icon.info, title: '도움말', detail: '처음 쓰는 법', show: true },
+  ];
+  return (
+    <Panel tight>
+      <CardHeader title="더 보기" subtitle="자주 쓰지 않아 사이드바에서 뺀 화면이에요. ⌘K로도 찾아 가요." />
+      {rows.filter((r) => r.show).map((r) => <MenuRow key={r.key} icon={r.icon} title={r.title} detail={r.detail} onClick={() => go({ section: r.key })} />)}
+    </Panel>
+  );
+}
+
+export function Settings() {
+  const { session } = useApp();
   const [busy, setBusy] = useState(false);
   const [mockUrl, setMockUrl] = useState('http://127.0.0.1:47795');
   const info = session.info;
@@ -77,11 +99,7 @@ export function Settings() {
         </div>
       </Panel>
       <OtherMac />
-      {hasFeature(session.capabilities, 'projects') && hasView(session.capabilities, 'projects') && (
-        <Panel tight>
-          <MenuRow icon={Icon.box} title="프로젝트 가져오기" detail="처음 알아보기가 읽을 프로젝트를 회사별로 골라요" onClick={() => go({ section: 'projects' })} />
-        </Panel>
-      )}
+      <MoreScreens />
       <UpdateSettings />
       <TextSizeSettings />
       <NotifySettings />

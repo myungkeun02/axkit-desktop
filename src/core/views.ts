@@ -73,6 +73,7 @@ export interface SpendingView {
   month: string; currency: string; total: number; count: number;
   byCategory: { category: string; label: string; amount: number; count: number }[];
   previousTotal?: number; budget?: number | null; entries?: SpendEntry[];
+  /** The latest few (the whole month is in `entries`). */ recent?: { at?: string; merchant: string; amount: number; category?: string }[];
   categories?: { id: string; label: string }[];
   subscriptions?: { key: string; merchant: string; cadence: string; amount: number; nextDate?: string }[] | null;
 }
